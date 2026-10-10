@@ -1,0 +1,186 @@
+#!/usr/bin/env sh
+set -eu
+
+# Resolve this script's real location, following symlinks, so the checkout
+# root is derived from where the script actually lives, not from $PWD.
+self=$0
+while [ -h "$self" ]; do
+  link=$(readlink -- "$self")
+  case $link in
+    /*) self=$link ;;
+    *)  self=$(dirname -- "$self")/$link ;;
+  esac
+done
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$self")" && pwd)
+
+# Single source of truth for the checkout root. An exported PLTFCTL_HOME is
+# honoured only as an explicit escape hatch; either way it is validated so a
+# wrong root fails loudly instead of misbehaving downstream.
+PLTFCTL_HOME=${PLTFCTL_HOME:-$(CDPATH='' cd -- "$script_dir/.." && pwd)}
+[ -f "$PLTFCTL_HOME/scripts/lib/pltfctl/common.sh" ] || {
+  printf '[err ] PLTFCTL_HOME is not a pltfctl checkout: %s\n' "$PLTFCTL_HOME" >&2
+  exit 1
+}
+readonly PLTFCTL_HOME
+export PLTFCTL_HOME
+
+# Every external artifact version. Required, not optional: it is the only place
+# these are defined, so a missing file must fail here rather than let the run
+# proceed on whatever a downstream default happened to be.
+# See scripts/README.md#the-sbom
+[ -f "$PLTFCTL_HOME/.env.sbom" ] || {
+  printf '[err ] .env.sbom not found at %s — it holds every pinned version\n' \
+    "$PLTFCTL_HOME/.env.sbom" >&2
+  exit 1
+}
+# .env.sbom names a version by its plain name (CILIUM_VERSION), the same
+# name a caller exports to override it, so sourcing would clobber the
+# override. Save it first and put it back after.
+_cilium_override=${CILIUM_VERSION:-}
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../.env.sbom
+. "$PLTFCTL_HOME/.env.sbom"
+[ -z "$_cilium_override" ] || CILIUM_VERSION=$_cilium_override
+
+# Fleet inventory: cluster names, ports, CIDRs, IDs, network, registry. The
+# source of truth for everything this project creates. See infra/fleet.env
+[ -f "$PLTFCTL_HOME/infra/fleet.env" ] || {
+  printf '[err ] infra/fleet.env not found at %s — it defines the fleet\n' \
+    "$PLTFCTL_HOME/infra/fleet.env" >&2
+  exit 1
+}
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../infra/fleet.env
+. "$PLTFCTL_HOME/infra/fleet.env"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/core/log.sh
+. "$PLTFCTL_HOME/scripts/lib/core/log.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/common.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/common.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/flux.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/flux.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/cilium.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/cilium.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/cmds.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/cmds.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/sbom.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/sbom.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/images.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/images.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/verify_local.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/verify_local.sh"
+
+# k3s image tag, from .env.sbom; override via K3D_TAG (must exist for your
+# arch). Floor >= v1.34.1-k3s1 (CoreDNS 1.12.3): MCS-API's `multicluster`
+# CoreDNS plugin for .clusterset.local requires CoreDNS >= 1.12.2.
+K3D_TAG=${K3D_TAG:-$K3S_IMAGE_TAG}
+export K3D_TAG
+
+# Upstream resolver file bind-mounted into every node. Defaults to the
+# in-repo file; override for an internal/corporate resolver behind a VPN or
+# on an air-gapped host. See scripts/README.md#dns-and-pltf_resolv_conf
+# pltf_render_k3d_config's plain `envsubst` cannot expand `${VAR:-default}`
+# inside the YAML, so the default is resolved here, once, and exported.
+PLTF_RESOLV_CONF=${PLTF_RESOLV_CONF:-$PLTFCTL_HOME/infra/network/resolv.conf}
+export PLTF_RESOLV_CONF
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  pltfctl up [lite|dev|fleet]   Stand a distro up. Default: dev.
+  pltfctl down                  Delete every pltfctl cluster (+ the registry).
+  pltfctl status                Cluster, registry, Flux and fabric health.
+  pltfctl open [ui] [cluster]   List the fabric UIs, or open one in a browser.
+  pltfctl verify                In-cluster: HTTP, TCP, TLS, gRPC. One cluster: Jobs in
+                                default hit podinfo in kube-public. Fleet: the
+                                same protocols across the ClusterMesh. Both: HTTP
+                                from this host through the gateway (curl).
+  pltfctl doctor                Verify required tools are on PATH + SBOM drift.
+
+Distros (one at a time; values in infra/fleet.env):
+  lite   k3d-lite           flannel + kube-proxy, no registry.
+                            http://<ui>.k3d.workbench.local.gd:8080
+  dev    k3d-dev            Cilium (no kube-proxy) + Hubble, registry,
+                            workload o11y stack (planned).
+                            http://<ui>.k3d.workbench.local.gd:8080
+  fleet  k3d-op-1, -2, -3   Cilium ClusterMesh across three clusters, registry,
+                            no o11y stack. Hosts are prefixed per cluster:
+                            http://op-1-<ui>…:8080  op-2-<ui>…:9080  op-3-<ui>…:7080
+
+  `fleet` is for something that must keep working after a whole cluster is
+  lost: anything deciding by majority vote needs three failure domains.
+
+Every distro runs Flux; in kube-system kgateway + the Gateway (/readyz
+route) and the kube-argus dashboard; in kube-public one podinfo pod (HTTP
+9898, TLS 9899, gRPC 9999) behind the podinfo smoke route. dev and fleet
+export podinfo across the mesh and add the local OCI registry:
+  push from host: oci://localhost:5001   in-cluster: oci-registry:5000
+
+Environment:
+  PLTFCTL_HOME     Root of the pltfctl checkout (auto-detected if unset).
+  K3D_TAG          k3s image tag (default: from .env.sbom).
+  CILIUM_VERSION   Cilium version (default: from .env.sbom).
+  PLTF_RESOLV_CONF Upstream resolver file mounted into every node, in
+                    resolv.conf format (default: infra/network/resolv.conf's public
+                    resolvers). Override to point at an internal/corporate
+                    resolver behind a VPN or on an air-gapped host.
+USAGE
+}
+
+# Reject trailing args so typos fail fast instead of being silently dropped.
+require_no_args() {
+  if [ "$#" -gt 0 ]; then
+    case "$1" in
+      -h | --help) usage; exit 0 ;;
+      *) pltf_die "Unknown argument: $1" ;;
+    esac
+  fi
+}
+
+main() {
+  [ "$#" -ge 1 ] || { usage; exit 1; }
+  subcmd=$1
+  shift
+
+  case "$subcmd" in
+    up)
+      distro=$PLTF_DEFAULT_DISTRO
+      if [ "$#" -ge 1 ]; then
+        case "$1" in
+          -h | --help) usage; exit 0 ;;
+          *)
+            pltf_distro "$1" CLUSTERS >/dev/null ||
+              pltf_die "Unknown distro: $1 (expected: $(pltf_distro_names))"
+            distro=$1; shift ;;
+        esac
+      fi
+      require_no_args "$@"
+      cmd_up "$distro"
+      ;;
+    down)   require_no_args "$@"; cmd_down ;;
+    status) require_no_args "$@"; cmd_status ;;
+    open)
+      # Not require_no_args (open takes up to two), but the same intent: reject
+      # a trailing arg instead of silently dropping it and acting on the wrong
+      # cluster, and honour -h like every other subcommand.
+      case "${1:-}" in -h | --help) usage; exit 0 ;; esac
+      [ "$#" -le 2 ] ||
+        pltf_die "Unknown argument: $3 (usage: open [<ui>] [<cluster>])"
+      cmd_open "$@"
+      ;;
+    verify) require_no_args "$@"; cmd_verify ;;
+    doctor) require_no_args "$@"; cmd_doctor ;;
+    -h | --help | help) usage ;;
+    *) pltf_die "Unknown subcommand: $subcmd" ;;
+  esac
+}
+
+main "$@"

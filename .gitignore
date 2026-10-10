@@ -1,0 +1,25 @@
+# OS droppings
+.DS_Store
+Thumbs.db
+
+# IDE / editor state
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.*.sw?
+
+# Temporary / scratch files
+*.tmp
+*.bak
+*.orig
+*.log
+tmp/
+
+# Agentic working files — session scratch, briefs/reports, specs/plans.
+# These stay on the workstation; they do not travel with the repository.
+.claude/
+.superpowers/
+docs/superpowers/

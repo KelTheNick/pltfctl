@@ -1,0 +1,61 @@
+# kgateway releases. Source (HelmRepository `kgateway`) lives in
+# repositories.yaml.
+#
+# Two HelmReleases with dependsOn ordering (the Flux equivalent of Helmfile
+# `needs:` edges): the CRDs chart must be Ready before the controller installs.
+#
+# Prerequisite (applied outside Flux, see README): the upstream Gateway API
+# CRDs (gateway.networking.k8s.io). kgateway-crds ships only kgateway's own
+# CRDs (gateway.kgateway.dev), not the Gateway API standard channel.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kgateway-crds
+  namespace: kube-system
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: kgateway-crds
+      version: "2.3.5"
+      sourceRef:
+        kind: HelmRepository
+        name: kgateway
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kgateway
+  namespace: kube-system
+spec:
+  interval: 10m
+  # Layered ordering: the controller waits for its CRDs to be installed.
+  dependsOn:
+    - name: kgateway-crds
+  # Correct drift, but leave replicas alone, so an HPA (or a manual
+  # `kubectl scale`) is not reverted on the next reconcile.
+  driftDetection:
+    mode: enabled
+    ignore:
+      - paths: ["/spec/replicas"]
+        target:
+          kind: Deployment
+          name: kgateway
+  chart:
+    spec:
+      chart: kgateway
+      version: "2.3.5"
+      sourceRef:
+        kind: HelmRepository
+        name: kgateway
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3

@@ -1,0 +1,78 @@
+#!/usr/bin/env sh
+set -eu
+
+# projctl — project housekeeping and scaffolding. Never touches a cluster;
+# that is pltfctl's job. Works on the checkout itself: lints scripts,
+# checks the layout invariants, and scaffolds new deploy/ entries.
+
+# Resolve the real script location (following symlinks) so the checkout root
+# does not depend on $PWD. Same scheme as pltfctl.
+self=$0
+while [ -h "$self" ]; do
+  link=$(readlink -- "$self")
+  case $link in
+    /*) self=$link ;;
+    *)  self=$(dirname -- "$self")/$link ;;
+  esac
+done
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$self")" && pwd)
+
+PLTFCTL_HOME=${PLTFCTL_HOME:-$(CDPATH='' cd -- "$script_dir/.." && pwd)}
+[ -f "$PLTFCTL_HOME/infra/fleet.env" ] || {
+  printf '[err ] PLTFCTL_HOME is not a pltfctl checkout: %s\n' "$PLTFCTL_HOME" >&2
+  exit 1
+}
+readonly PLTFCTL_HOME
+export PLTFCTL_HOME
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../infra/fleet.env
+. "$PLTFCTL_HOME/infra/fleet.env"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/core/log.sh
+. "$PLTFCTL_HOME/scripts/lib/core/log.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/projctl/qa.sh
+. "$PLTFCTL_HOME/scripts/lib/projctl/qa.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/projctl/scaffold.sh
+. "$PLTFCTL_HOME/scripts/lib/projctl/scaffold.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/projctl/housekeeping.sh
+. "$PLTFCTL_HOME/scripts/lib/projctl/housekeeping.sh"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  projctl lint                     sh -n + shellcheck (if installed) on every script.
+  projctl check                    Layout invariants: fleet.env vs infra/ and deploy/,
+                                   unique ports/CIDRs/IDs, no dangling symlinks.
+  projctl new-ns  <ctx> <ns>       Scaffold deploy/<ctx>/<ns>/namespace.yaml.
+  projctl new-app <ctx> <ns> <app> Scaffold deploy/<ctx>/<ns>/<app>.yaml: a Flux
+                                   OCIRepository (in flux-system) + HelmRelease pulling the chart
+                                   from the local registry (oci-registry:5000).
+  projctl clean [-f]               List (default) or delete (-f) scratch files:
+                                   tmp/, *.tmp, *.bak, *.orig, *.log.
+
+<ctx> is k3d-base (shared by every distro) or one context: k3d-lite, k3d-dev,
+k3d-op-1, k3d-op-2, k3d-op-3. k3d-op-1 links its namespaces to k3d-dev's and
+k3d-op-2/3 link to k3d-op-1's, so scaffolding into a linked namespace changes
+every context sharing it. Use a new namespace to diverge per context.
+USAGE
+}
+
+main() {
+  [ $# -ge 1 ] || { usage; exit 1; }
+  _cmd=$1; shift
+  case "$_cmd" in
+    lint)            proj_lint "$@" ;;
+    check)           proj_check "$@" ;;
+    new-ns)          proj_new_ns "$@" ;;
+    new-app)         proj_new_app "$@" ;;
+    clean)           proj_clean "$@" ;;
+    -h | --help | help) usage ;;
+    *)               usage; pltf_die "Unknown command: $_cmd" ;;
+  esac
+}
+
+main "$@"

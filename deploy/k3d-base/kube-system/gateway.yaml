@@ -1,0 +1,64 @@
+# Shared kgateway Gateway for the spike, the stable attachment point that
+# HTTPRoutes bind to. Plain Gateway API resources (not a HelmRelease); the
+# kgateway controller (deployed by kgateway.yaml) provisions a proxy
+# Deployment + Service for this Gateway.
+#
+# GatewayParameters forces the proxy Service to type LoadBalancer on port 80 so
+# k3d's klipper servicelb binds :80 on the nodes and the k3d serverlb publishes
+# each cluster's LB HTTP port to it (see infra/fleet.env).
+# HTTPS (:8443/:9443 → :443) is reserved in the k3d port maps only; add a 443
+# listener here when TLS lands — no cluster rebuild needed.
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: GatewayParameters
+metadata:
+  name: gw-api-kgateway
+  namespace: kube-system
+spec:
+  kube:
+    service:
+      type: LoadBalancer
+      ports:
+        - port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gw-api-kgateway
+  namespace: kube-system
+spec:
+  gatewayClassName: kgateway
+  infrastructure:
+    parametersRef:
+      group: gateway.kgateway.dev
+      kind: GatewayParameters
+      name: gw-api-kgateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+# /readyz to the kgateway controller. Gives downstream consumers a known-good
+# URL to dial during bootstrap probes.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gw-route-readyz
+  namespace: kube-system
+spec:
+  parentRefs:
+    - name: gw-api-kgateway
+      sectionName: http
+  hostnames:
+    - ${PLTF_HOST_PREFIX}gateway.k3d.workbench.local.gd
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /readyz
+      backendRefs:
+        # kgateway serves /readyz on its `health` port (9093), not grpc-xds (9977).
+        - name: kgateway
+          port: 9093

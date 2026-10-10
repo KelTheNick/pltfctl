@@ -1,0 +1,48 @@
+---
+# In-cluster TLS check: a client in `default` hitting podinfo in
+# `kube-public` through its Service. Succeeds only if every sample answers AND
+# names this cluster (CLUSTER, from the pltf-cluster-info ConfigMap that `up`
+# writes into `default`). The client runs on the podinfo image (curl, nc and
+# podcli), so podinfo is the only test image the cluster pulls.
+#
+# Applied by `pltfctl verify`, NOT by `up`: flux_apply_tree skips verify-*.yaml.
+# verify deletes the previous run first (a finished Job never re-runs on
+# re-apply) and leaves this run's Job and pod in place for inspection.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pltf-verify-tls
+  namespace: default
+  labels:
+    app.kubernetes.io/name: pltf-verify
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pltf-verify
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: client
+          image: ghcr.io/stefanprodan/podinfo:6.9.2
+          command: ["sh", "-c"]
+          # -k: podinfo's certificate is self-signed (see podinfo.yaml).
+          args:
+            - |
+              i=0
+              while [ "$i" -lt "$N" ]; do
+                i=$((i + 1))
+                r=$(curl -sk -m 5 "https://$SVC:9899/api/info" | grep '"message"' | cut -d'"' -f4)
+                [ "$r" = "$CLUSTER" ] || { echo "FAIL sample $i/$N: got ${r:-<no answer>}, want $CLUSTER"; exit 1; }
+              done
+              echo "PASS $N/$N samples answered by $CLUSTER"
+          env:
+            - { name: "SVC", value: "podinfo.kube-public.svc.cluster.local" }
+            - { name: "N", value: "10" }
+            - name: "CLUSTER"
+              valueFrom:
+                configMapKeyRef: { name: pltf-cluster-info, key: cluster }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }

@@ -1,0 +1,25 @@
+---
+# Split from repositories.yaml so registry-less distros (lite) can omit it.
+# ── oci-registry ──────────────────────────────────────────────────────
+# The shared k3d-managed local registry. Push from the host to
+# oci://localhost:5001/<name>; Flux's source-controller pulls in-cluster
+# from oci-registry:5000 (inside a pod, `localhost` is the pod).
+#
+# Live-verified (Task 7): k3d names the registry container/network-alias
+# exactly as given to `registries.create.name` in infra/k3d/dev/dev.yaml (and fleet/op-1.yaml) — "oci-registry"
+# — with NO "k3d-" prefix (that prefix is only added to cluster nodes:
+# servers/agents/serverlb). CoreDNS's injected NodeHosts confirms this
+# (`oci-registry` → the registry's docker-network IP). The previous
+# `k3d-oci-registry` address does not resolve in-cluster.
+#
+# Plain HTTP, hence `insecure` — throwaway workstation registry only.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: oci-registry
+  namespace: flux-system
+spec:
+  type: oci
+  interval: 5m
+  insecure: true
+  url: oci://oci-registry:5000

@@ -1,0 +1,16 @@
+---
+# Exports podinfo across the ClusterMesh (MCS-API). Cilium-only, so it lives
+# here rather than with podinfo in k3d-base.
+apiVersion: multicluster.x-k8s.io/v1alpha1
+kind: ServiceExport
+metadata:
+  name: podinfo
+  namespace: kube-public
+spec:
+  # MUST be here and NOT on the Service. MCS-API reconciles an auto-generated
+  # derived Service that does not inherit Service-level annotations, so the
+  # annotation only takes effect via exportedAnnotations. Setting it in BOTH
+  # places opens a second, conflicting mirror path that merges both clusters'
+  # pod IPs under the same hostnames — one name resolving to two clusters.
+  exportedAnnotations:
+    service.cilium.io/global-sync-endpoint-slices: "true"

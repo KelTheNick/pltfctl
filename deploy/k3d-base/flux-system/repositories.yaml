@@ -1,0 +1,32 @@
+---
+# Flux Helm repository sources for the pltfctl fabric.
+#
+# Sources live in flux-system, Flux's own namespace; HelmReleases live in the
+# namespace they install into and reference these with
+# sourceRef.namespace: flux-system.
+
+# ── kgateway ──────────────────────────────────────────────────────────
+# Envoy-based Gateway API data plane. Charts are published as OCI artifacts.
+# Upstream project: https://kgateway.dev
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: kgateway
+  namespace: flux-system
+spec:
+  type: oci
+  interval: 30m
+  url: oci://cr.kgateway.dev/kgateway-dev/charts
+---
+# ── kube-argus ────────────────────────────────────────────────────────
+# Lightweight Kubernetes dashboard.
+# Upstream project: https://github.com/manishchaudhary101/kube-argus
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: kube-argus
+  namespace: flux-system
+spec:
+  type: default
+  interval: 30m
+  url: https://manishchaudhary101.github.io/kube-argus

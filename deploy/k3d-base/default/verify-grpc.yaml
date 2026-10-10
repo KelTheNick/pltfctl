@@ -1,0 +1,51 @@
+---
+# In-cluster GRPC check: a client in `default` hitting podinfo in
+# `kube-public` through its Service. Succeeds only if every sample answers AND
+# names this cluster (CLUSTER, from the pltf-cluster-info ConfigMap that `up`
+# writes into `default`). The client runs on the podinfo image (curl, nc and
+# podcli), so podinfo is the only test image the cluster pulls.
+#
+# Applied by `pltfctl verify`, NOT by `up`: flux_apply_tree skips verify-*.yaml.
+# verify deletes the previous run first (a finished Job never re-runs on
+# re-apply) and leaves this run's Job and pod in place for inspection.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pltf-verify-grpc
+  namespace: default
+  labels:
+    app.kubernetes.io/name: pltf-verify
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pltf-verify
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: client
+          image: ghcr.io/stefanprodan/podinfo:6.9.2
+          command: ["sh", "-c"]
+          # podcli (shipped in the podinfo image) asks podinfo's gRPC health
+          # service for a service named after this cluster. podinfo registers
+          # health only under its own cluster name, so SERVING proves both the
+          # gRPC path and which cluster answered.
+          args:
+            - |
+              i=0
+              while [ "$i" -lt "$N" ]; do
+                i=$((i + 1))
+                podcli check grpc "$SVC:9999" --service="$CLUSTER" --timeout=5s >/dev/null 2>&1 ||
+                  { echo "FAIL sample $i/$N: gRPC health for service=$CLUSTER not SERVING"; exit 1; }
+              done
+              echo "PASS $N/$N samples answered by $CLUSTER"
+          env:
+            - { name: "SVC", value: "podinfo.kube-public.svc.cluster.local" }
+            - { name: "N", value: "10" }
+            - name: "CLUSTER"
+              valueFrom:
+                configMapKeyRef: { name: pltf-cluster-info, key: cluster }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
