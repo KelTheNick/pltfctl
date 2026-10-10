@@ -7,7 +7,7 @@
   the registry and the CA, so `up` creates it first and `down` deletes it after its peers
   (`PLTF_ALL_CLUSTERS='op-3 op-2 op-1 dev lite'` in `infra/fleet.env`).
 - **Cilium and Hubble are installed by cilium-cli, not Flux**, on the Cilium distros (`dev`,
-  `fleet`). The CNI has to exist before Flux's controllers can schedule. Never turn them into a
+  `fleet`). Hubble's relay and UI are opt-in (`PLTF_ENABLE=hubble`). The CNI has to exist before Flux's controllers can schedule. Never turn them into a
   Flux HelmRelease.
 - **Any `cilium install --set` value** in `scripts/lib/pltfctl/cilium.sh`. `up` skips what
   already exists but never updates it: `cilium_installed` treats "the DaemonSet exists" as
@@ -42,6 +42,13 @@
   images into the nodes with `k3d image import`, which keeps tags but not registry digests.
   Switching back to digests makes every node download again, silently
   (`scripts/lib/pltfctl/cilium.sh`, `scripts/lib/pltfctl/images.sh`).
+- **Hubble relay and UI stay off by default.** They are opt-in through `PLTF_ENABLE=hubble`
+  (`scripts/lib/pltfctl/cilium.sh`); the 16GB-laptop memory budget assumes they are off.
+- **One Kafka bus per cluster, in `kafka-system`.** The memory budget in
+  `wiki/devsecops/08-event-bus.md` has room for one.
+- **`up` never starts the event bus.** `flux_apply_tree` skips `$PLTF_EVENT_BUS_NS`
+  (`kafka-system`); only `pltfctl event-bus up` applies it. Removing that skip puts Kafka on
+  every `up`.
 - **`verify-*.yaml` stays out of `up`.** `flux_apply_tree` skips those files by name, and
   `pltfctl verify` applies them itself. Renaming one makes its Job run on every `up`.
 - **The workload-o11y stack does not exist yet.** `PLTF_DISTRO_DEV_O11Y=true` is declared

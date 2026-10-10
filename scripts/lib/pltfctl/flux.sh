@@ -32,19 +32,22 @@ flux_install_manifest() {
   cat "$_fm_cache"
 }
 
-# Drop every install.yaml document belonging to image-reflector-controller or
-# image-automation-controller (their CRDs, ServiceAccounts and Deployments,
-# all labelled app.kubernetes.io/component). pltfctl pins versions in
-# .env.sbom and applies from the checkout, not Git, so image update
-# automation has nothing to do — it would only poll registries.
-flux_drop_image_automation() {
+# Keep only source-controller and helm-controller. Every other controller's
+# install.yaml documents (CRDs, ServiceAccounts, Deployments, all labelled
+# app.kubernetes.io/component) are dropped: pltfctl pins versions in
+# .env.sbom and applies deploy/ from the checkout itself, so there are no
+# Kustomizations, image policies, alerts or artifact generators to reconcile.
+# --events-addr goes too: it points at the dropped notification-controller,
+# and every event would otherwise log a failed POST.
+flux_drop_unused_controllers() {
   awk '
     function flush() {
-      if (doc != "" && doc !~ /app\.kubernetes\.io\/component: image-(reflector|automation)-controller/)
+      if (doc != "" && doc !~ /app\.kubernetes\.io\/component: (image-reflector-controller|image-automation-controller|kustomize-controller|notification-controller|source-watcher)\n/)
         printf "---\n%s", doc
       doc = ""
     }
     /^---[[:space:]]*$/ { flush(); next }
+    /--events-addr=/ { next }
     { doc = doc $0 "\n" }
     END { flush() }
   '
@@ -57,10 +60,10 @@ flux_bootstrap() { # ctx
   if kubectl --context "$_ctx" get ns flux-system >/dev/null 2>&1; then
     pltf_info "Flux already installed on $_ctx (flux-system present)"
   else
-    pltf_step "installing Flux controllers on $_ctx (without image automation)"
+    pltf_step "installing Flux controllers on $_ctx (source + helm only)"
     _fb_yaml=$(flux_install_manifest) ||
       pltf_die "could not download Flux install manifest: $FLUX_INSTALL_URL"
-    printf '%s\n' "$_fb_yaml" | flux_drop_image_automation |
+    printf '%s\n' "$_fb_yaml" | flux_drop_unused_controllers |
       kubectl --context "$_ctx" apply -f - >/dev/null
   fi
   pltf_step "waiting for Flux source/helm controllers on $_ctx"
@@ -86,6 +89,8 @@ flux_apply_tree() { # ctx
 
   for _tree in $_trees; do
     for _ns_dir in "$_tree"/*/; do
+      # The event bus is a toggle (`pltfctl event-bus up`), never part of `up`.
+      case "$_ns_dir" in */"$PLTF_EVENT_BUS_NS"/) continue ;; esac
       for _f in "$_ns_dir"namespace.yaml "$_ns_dir"repositories.yaml "$_ns_dir"registry.yaml; do
         [ -e "$_f" ] && flux_apply_file "$_ctx" "$_f" >/dev/null
       done
@@ -99,6 +104,7 @@ flux_apply_tree() { # ctx
       # verify-*.yaml are run-on-demand checks (Jobs) that `pltfctl verify`
       # applies itself; applying them here would run them on every `up`.
       case "${_f##*/}" in verify-*) continue ;; esac
+      case "$_f" in */"$PLTF_EVENT_BUS_NS"/*) continue ;; esac
       _pending="$_pending $_f"
     done
   done

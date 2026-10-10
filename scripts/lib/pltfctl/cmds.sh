@@ -583,11 +583,11 @@ cmd_doctor() {
   return $_rc
 }
 
-# The UIs a cluster actually serves: hubble ships with Cilium, so it is
-# absent on flannel distros (lite).
+# The UIs a cluster actually serves: hubble needs Cilium and is opt-in
+# (PLTF_ENABLE=hubble), so it is absent on lite and by default.
 pltf_uis_for() { # name
   for _u in $PLTF_UIS; do
-    if [ "$_u" = hubble ] && ! pltf_cluster_is "$1" CNI cilium; then continue; fi
+    if [ "$_u" = hubble ] && { ! pltf_cluster_is "$1" CNI cilium || ! pltf_enabled hubble; }; then continue; fi
     printf '%s ' "$_u"
   done
 }

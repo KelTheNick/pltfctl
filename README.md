@@ -22,8 +22,8 @@
 `pltfctl` is a Developer Workstation quickstart. It gives you a local,
 throwaway Kubernetes environment (via [k3d](https://k3d.io)) on a MacBook or
 Ubuntu workstation, in one of three distros: `lite` (one cluster, k3s's own
-networking), `dev` (the default: one cluster on Cilium, with Hubble and a local
-OCI registry) or `fleet` (three Cilium clusters meshed together). Every distro
+networking), `dev` (the default: one cluster on Cilium, with a local OCI
+registry) or `fleet` (three Cilium clusters meshed together). Every distro
 runs a GitOps operator ([Flux](https://fluxcd.io), in `flux-system`), an API
 gateway (KGateway) and a Kubernetes dashboard (Kube-Argus) in `kube-system`, and
 a podinfo test server in `kube-public`. On `dev` and `fleet`, Cilium is
@@ -68,6 +68,7 @@ Then, from the repo root:
 ./scripts/pltfctl status          # cluster, Flux, gateway and Cilium health
 ./scripts/pltfctl open            # lists the UI URLs; `open argus` opens one
 ./scripts/pltfctl verify          # proves HTTP, TCP, TLS and gRPC work
+./scripts/pltfctl event-bus up    # optional: adds Kafka (lite, dev); `event-bus status`, `event-bus down`
 ./scripts/pltfctl down            # deletes every pltfctl cluster
 ```
 
@@ -92,12 +93,14 @@ scripts/            every executable
   projctl           housekeeping: lint, check, new-ns, new-app, clean
   lib/              the functions both scripts source
 infra/              what the project creates
-  fleet.env         the source of truth: distros, clusters, ports, CIDRs, registry
+  fleet.env         the source of truth: distros, clusters, ports, CIDRs, registry,
+                    event-bus kinds
   k3d/<distro>/     k3d cluster templates, filled in from fleet.env
   network/          the DNS resolver every node uses
 deploy/             what runs on the clusters (Flux resources and manifests)
   k3d-base/         applied to every distro, by namespace
-  k3d-<cluster>/    one cluster's additions, by namespace
+  k3d-<cluster>/    one cluster's additions, by namespace (kafka-system is
+                    applied only by `pltfctl event-bus up`)
 docs/contributing/  how to change this project
 wiki/               how the platform works and why
 assets/icons/       the banner icons above

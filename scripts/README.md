@@ -1,8 +1,9 @@
 # scripts/
 
 This directory holds the two entrypoints, `pltfctl` and `projctl`. `pltfctl`
-sources five function-only libraries from `scripts/lib/pltfctl/` (`common.sh`,
-`flux.sh`, `cilium.sh`, `cmds.sh`, `sbom.sh`); `projctl` sources
+sources eight function-only libraries from `scripts/lib/pltfctl/` (`common.sh`,
+`flux.sh`, `cilium.sh`, `cmds.sh`, `sbom.sh`, `images.sh`, `verify_local.sh`,
+`kafka.sh`) after `scripts/lib/core/log.sh`; `projctl` sources
 `scripts/lib/projctl/`. The comments inside those files state
 constraints — one flag, one wait, one retry shape — without the reasoning
 behind them. This file is that reasoning: the symptom that shows up when the

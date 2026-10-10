@@ -32,7 +32,9 @@ Helpers go in `scripts/lib/<entrypoint>/`. Code used by more than one entrypoint
 ## Adding a subcommand
 
 - **pltfctl:** write `cmd_<name>()` in `scripts/lib/pltfctl/cmds.sh`. Then add it to the `case`
-  in `main()` and to the `usage()` text in `scripts/pltfctl`.
+  in `main()` and to the `usage()` text in `scripts/pltfctl`. A command group with its own verbs
+  (such as `event-bus up|down|status`) gets its own lib instead, for example
+  `scripts/lib/pltfctl/kafka.sh`, sourced from `scripts/pltfctl`.
 - **projctl:** write `proj_<name>()` in the matching `scripts/lib/projctl/*.sh` file (or add a new
   file and source it). Then add it to the `case` and `usage()` in `scripts/projctl`.
 

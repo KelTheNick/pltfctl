@@ -6,7 +6,7 @@ Where things live:
 | --- | --- |
 | `scripts/` | Every executable. `pltfctl` drives clusters; `projctl` does housekeeping and scaffolding. Helpers in `scripts/lib/<owner>/`. |
 | `infra/` | What the project creates: `fleet.env` (the distros, their clusters, ports, CIDRs, route host prefixes and the registry), k3d config templates, network files. |
-| `deploy/` | Flux CRs and manifests. `k3d-base/<namespace>/` is applied to every distro; `<kube-context>/<namespace>/` holds a context's additions. |
+| `deploy/` | Flux CRs and manifests. `k3d-base/<namespace>/` is applied to every distro; `<kube-context>/<namespace>/` holds a context's additions. `up` skips `kafka-system`; only `pltfctl event-bus up` applies it. |
 | `docs/` | Contributor guides: `docs/contributing/` has the details below. |
 | `wiki/` | Platform knowledge for DevOps and developers. Start at [WIKI.md](WIKI.md). |
 | `assets/` | Static files referenced by docs, such as the README banner icons in `assets/icons/`. |

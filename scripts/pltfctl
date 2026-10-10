@@ -77,6 +77,9 @@ _cilium_override=${CILIUM_VERSION:-}
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/pltfctl/verify_local.sh
 . "$PLTFCTL_HOME/scripts/lib/pltfctl/verify_local.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/kafka.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/kafka.sh"
 
 # k3s image tag, from .env.sbom; override via K3D_TAG (must exist for your
 # arch). Floor >= v1.34.1-k3s1 (CoreDNS 1.12.3): MCS-API's `multicluster`
@@ -104,11 +107,16 @@ Usage:
                                 same protocols across the ClusterMesh. Both: HTTP
                                 from this host through the gateway (curl).
   pltfctl doctor                Verify required tools are on PATH + SBOM drift.
+  pltfctl event-bus up [kraft]  Add the event bus to the running distro (lite,
+                                dev). Default: kraft (Strimzi Kafka, KRaft).
+  pltfctl event-bus down        Remove the event bus and its data.
+  pltfctl event-bus status      Operator, Kafka and per-broker state (live,
+                                starting, CrashLoopBackOff...). Exit 0 when Ready.
 
 Distros (one at a time; values in infra/fleet.env):
   lite   k3d-lite           flannel + kube-proxy, no registry.
                             http://<ui>.k3d.workbench.local.gd:8080
-  dev    k3d-dev            Cilium (no kube-proxy) + Hubble, registry,
+  dev    k3d-dev            Cilium (no kube-proxy), registry,
                             workload o11y stack (planned).
                             http://<ui>.k3d.workbench.local.gd:8080
   fleet  k3d-op-1, -2, -3   Cilium ClusterMesh across three clusters, registry,
@@ -126,6 +134,9 @@ export podinfo across the mesh and add the local OCI registry:
 
 Environment:
   PLTFCTL_HOME     Root of the pltfctl checkout (auto-detected if unset).
+  PLTF_ENABLE      Opt-in extras for `up`, space-separated (default: none):
+                     hubble        Cilium's Hubble relay + UI (dev, fleet)
+                   e.g. PLTF_ENABLE=hubble pltfctl up dev
   K3D_TAG          k3s image tag (default: from .env.sbom).
   CILIUM_VERSION   Cilium version (default: from .env.sbom).
   PLTF_RESOLV_CONF Upstream resolver file mounted into every node, in
@@ -178,6 +189,30 @@ main() {
       ;;
     verify) require_no_args "$@"; cmd_verify ;;
     doctor) require_no_args "$@"; cmd_doctor ;;
+    event-bus)
+      action=${1:-}
+      [ "$#" -eq 0 ] || shift
+      case "$action" in
+        up)
+          bus=$PLTF_EVENT_BUS_DEFAULT
+          if [ "$#" -ge 1 ]; then
+            case "$1" in
+              -h | --help) usage; exit 0 ;;
+              *)
+                pltf_event_bus_known "$1" ||
+                  pltf_die "Unknown event bus: $1 (expected: $(pltf_event_bus_names))"
+                bus=$1; shift ;;
+            esac
+          fi
+          require_no_args "$@"
+          cmd_event_bus_up "$bus"
+          ;;
+        down) require_no_args "$@"; cmd_event_bus_down ;;
+        status) require_no_args "$@"; cmd_event_bus_status ;;
+        -h | --help) usage ;;
+        *) pltf_die "Usage: pltfctl event-bus up [$(pltf_event_bus_names)] | down | status" ;;
+      esac
+      ;;
     -h | --help | help) usage ;;
     *) pltf_die "Unknown subcommand: $subcmd" ;;
   esac

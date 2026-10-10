@@ -30,3 +30,19 @@ spec:
   type: default
   interval: 30m
   url: https://manishchaudhary101.github.io/kube-argus
+---
+# ── strimzi ───────────────────────────────────────────────────────────
+# Kafka operator. Charts are published as OCI artifacts. Only lite and dev
+# install from it (deploy/k3d-{lite,dev}/kafka-system/); on fleet the source
+# sits unused, and an OCI HelmRepository fetches nothing until a release
+# references it.
+# Upstream project: https://strimzi.io
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: strimzi
+  namespace: flux-system
+spec:
+  type: oci
+  interval: 30m
+  url: oci://quay.io/strimzi-helm

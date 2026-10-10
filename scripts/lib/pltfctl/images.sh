@@ -16,9 +16,9 @@
 }
 
 # Flux controller images, read from the pinned install manifest after the
-# image-automation filter (so the two dropped controllers are not pulled).
+# controller filter (so dropped controllers are not pulled).
 pltf_images_flux() {
-  flux_install_manifest | flux_drop_image_automation |
+  flux_install_manifest | flux_drop_unused_controllers |
     sed -n 's/^[[:space:]]*image:[[:space:]]*//p' | tr -d '"' | sort -u
 }
 
@@ -26,12 +26,13 @@ pltf_images_flux() {
 # cilium_install uses (a k3d-imported image is found by tag, never by
 # digest). clustermesh-apiserver only on multi-cluster distros.
 pltf_images_cilium() { # distro
-  _ic_mesh=false
+  _ic_mesh=false; _ic_hub=false
+  pltf_enabled hubble && _ic_hub=true
   [ "$(pltf_distro_clusters "$1" | wc -l | tr -d ' ')" -ge 2 ] && _ic_mesh=true
   # shellcheck disable=SC2046 # word-split the flag list on purpose
   cilium install --version "$CILIUM_VERSION" --dry-run \
     --set k8sServiceHost=127.0.0.1 --set k8sServicePort=6443 \
-    --set hubble.relay.enabled=true --set hubble.ui.enabled=true \
+    --set hubble.relay.enabled="$_ic_hub" --set hubble.ui.enabled="$_ic_hub" \
     --set clustermesh.useAPIServer="$_ic_mesh" \
     $(cilium_image_flags) 2>/dev/null |
     sed -n 's/^[[:space:]]*image:[[:space:]]*//p' | tr -d '"' | sort -u
@@ -49,12 +50,18 @@ pltf_images_for() { # name
 }
 
 # Pull anything missing from the host cache, then import all of it into the
-# cluster's nodes in one k3d call. Non-fatal throughout.
-pltf_preload_images() { # name
-  _pi_list=$(pltf_images_for "$1" | sort -u) || _pi_list=''
+# cluster's nodes in one k3d call. Non-fatal throughout. With no image list,
+# preloads everything `up` needs (pltf_images_for); `event-bus up` passes its own.
+pltf_preload_images() { # name [image...]
+  _pi_name=$1; shift
+  if [ "$#" -gt 0 ]; then
+    _pi_list=$(printf '%s\n' "$@" | sort -u)
+  else
+    _pi_list=$(pltf_images_for "$_pi_name" | sort -u) || _pi_list=''
+  fi
   [ -n "$_pi_list" ] || { pltf_info "[warn] no images resolved to preload; nodes will pull"; return 0; }
   _pi_n=$(printf '%s\n' "$_pi_list" | wc -l | tr -d ' ')
-  pltf_step "preloading $_pi_n images into k3d-$1 (host pulls once, k3d imports)"
+  pltf_step "preloading $_pi_n images into k3d-$_pi_name (host pulls once, k3d imports)"
   _pi_ok=''
   for _pi_img in $_pi_list; do
     if docker image inspect "$_pi_img" >/dev/null 2>&1 || docker pull -q "$_pi_img" >/dev/null 2>&1; then
@@ -65,6 +72,6 @@ pltf_preload_images() { # name
   done
   [ -n "$_pi_ok" ] || return 0
   # shellcheck disable=SC2086 # _pi_ok is a space-joined list by design
-  k3d image import -c "$1" $_pi_ok >/dev/null 2>&1 ||
-    pltf_info "[warn] k3d image import failed for k3d-$1; nodes will pull instead"
+  k3d image import -c "$_pi_name" $_pi_ok >/dev/null 2>&1 ||
+    pltf_info "[warn] k3d image import failed for k3d-$_pi_name; nodes will pull instead"
 }

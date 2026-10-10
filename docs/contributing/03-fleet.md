@@ -8,6 +8,8 @@
   and route host prefix
 - the shared Docker network
 - the OCI registry's name and ports
+- the event-bus kinds, the default kind and namespace (`PLTF_EVENT_BUSES`,
+  `PLTF_EVENT_BUS_DEFAULT`, `PLTF_EVENT_BUS_NS`), used by `pltfctl event-bus`
 
 The k3d configs in `infra/k3d/<distro>/<cluster>.yaml` are **templates**. `pltfctl up` renders each one
 with `envsubst` from `fleet.env`, and the scripts read the same file through

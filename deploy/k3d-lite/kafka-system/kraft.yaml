@@ -1,0 +1,54 @@
+# The lite event bus: one combined controller+broker node on ephemeral
+# (emptyDir) storage. Data does not survive a pod restart; replication
+# factors are 1 because there is nothing to replicate to.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: kraft-broker
+  namespace: kafka-system
+  labels:
+    strimzi.io/cluster: strimzi
+spec:
+  replicas: 1
+  roles: [controller, broker]
+  storage:
+    type: ephemeral
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits: { memory: 768Mi }
+  jvmOptions:
+    -Xms: 384m
+    -Xmx: 384m
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: strimzi
+  namespace: kafka-system
+spec:
+  kafka:
+    version: 4.3.1
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+  entityOperator:
+    topicOperator:
+      resources:
+        requests: { cpu: 50m, memory: 192Mi }
+        limits: { memory: 192Mi }
+    userOperator:
+      resources:
+        requests: { cpu: 50m, memory: 192Mi }
+        limits: { memory: 192Mi }

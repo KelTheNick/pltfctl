@@ -18,7 +18,7 @@ Sources: `infra/fleet.env`, `infra/k3d/lite/lite.yaml`, `infra/k3d/dev/dev.yaml`
 - **What "fleet" means here.** In pltfctl, a fleet is one system spread across several clusters that are meshed together and act as failure domains for it. That differs from the common industry use, where a "fleet" is many independent clusters managed together. pltfctl's fleet clusters share one ClusterMesh, one registry (on `op-1`) and one Cilium CA (from `op-1`) (`infra/fleet.env`, `scripts/lib/pltfctl/cmds.sh`).
 - **Why three clusters in `fleet`.** Three is the first count where you can lose one. Software that decides by majority vote needs two of three to agree; with two places, one holds the majority and losing it stops everything. pltfctl supplies the failure domains and does not know which workload uses them (`scripts/lib/pltfctl/common.sh`).
 - **`fleet` has not been live-tested.** It has not yet been run end to end on a live machine (`docs/contributing/05-verifying.md`).
-- **`O11Y=true` on `dev` is declared only.** No workload-observability stack is wired yet. Hubble is separate: it ships with Cilium on every Cilium distro (`infra/fleet.env`).
+- **`O11Y=true` on `dev` is declared only.** No workload-observability stack is wired yet. Hubble is separate: it comes with Cilium, and its relay and UI are opt-in (`PLTF_ENABLE=hubble`) on every Cilium distro (`infra/fleet.env`, `scripts/lib/pltfctl/common.sh`).
 
 ## Node shapes
 
@@ -78,7 +78,7 @@ If a `cilium install` was interrupted, the DaemonSet can exist without a finishe
 
 Flux is the GitOps controller set that reconciles the `deploy/` tree. `up` downloads Flux's pinned `install.yaml`, applies it, waits for `source-controller` and `helm-controller`, then applies the Gateway API standard CRDs (`flux_bootstrap` in `scripts/lib/pltfctl/flux.sh`).
 
-- **Image automation is filtered out.** Every `install.yaml` document labelled for `image-reflector-controller` or `image-automation-controller` (their CRDs, ServiceAccounts and Deployments) is dropped before apply. pltfctl pins versions in `.env.sbom` and applies from the checkout, not from Git, so image update automation would have nothing to do except poll registries (`flux_drop_image_automation` in `scripts/lib/pltfctl/flux.sh`).
+- **Only `source-controller` and `helm-controller` run.** Every `install.yaml` document labelled for `kustomize-controller`, `notification-controller`, `source-watcher`, `image-reflector-controller` or `image-automation-controller` (their CRDs, ServiceAccounts and Deployments) is dropped before apply, along with the `--events-addr` flag that points at the notification-controller. pltfctl pins versions in `.env.sbom` and applies `deploy/` from the checkout itself, so there are no Kustomizations, image policies, alerts or artifact generators to reconcile. Dropping the three idle controllers saves memory on a 16GB laptop (`flux_drop_unused_controllers` in `scripts/lib/pltfctl/flux.sh`).
 - **Cilium is not Flux-managed.** cilium-cli installs it, because the CNI must exist before Flux's own pods can schedule, and two controllers reconciling one Helm release would fight (`deploy/k3d-dev/kube-system/hubble.yaml`).
 - **Apply order.** `deploy/k3d-base/` goes to every cluster first, then the cluster's own directory if it has one. Each namespace's `namespace.yaml` and Flux sources go first. Everything else is applied in rounds (up to 24, 5s apart) because a manifest can depend on a CRD that a different manifest's HelmRelease is still installing. An empty tree fails loudly instead of `up` reporting success (`scripts/lib/pltfctl/flux.sh`, `scripts/README.md`).
 
@@ -88,11 +88,15 @@ Every k3d node keeps its own image cache, and `down` throws it away. Without hel
 
 | Distro | Images per cluster | What |
 |---|---|---|
-| `lite` | 9 | podinfo, the Flux controllers, kgateway and its proxy (`envoy-wrapper`), kube-argus |
-| `dev` | 15 | the above plus Cilium: agent, operator, envoy, hubble-relay, hubble-ui (2) |
-| `fleet` | 16 | the above plus `clustermesh-apiserver` |
+| `lite` | 6 | podinfo, the two Flux controllers, kgateway and its proxy (`envoy-wrapper`), kube-argus |
+| `dev` | 9 | the above plus Cilium: agent, operator, envoy. With `PLTF_ENABLE=hubble`, also hubble-relay and hubble-ui (2) |
+| `fleet` | 10 | as `dev`, plus `clustermesh-apiserver` |
 
-- **Every image comes from a pin.** podinfo, kgateway and kube-argus from `.env.sbom`; the Flux controllers from the pinned `install.yaml` (after the image-automation filter); Cilium from `cilium install --dry-run` at `CILIUM_VERSION`. Nothing is listed twice (`scripts/lib/pltfctl/images.sh`).
+`pltfctl event-bus up` preloads its own two images (the Strimzi operator and Kafka) when it runs.
+
+These counts are worked out from the pins, not measured on a run.
+
+- **Every image comes from a pin.** podinfo, kgateway and kube-argus from `.env.sbom`; the Flux controllers from the pinned `install.yaml` (after the controller filter); Cilium from `cilium install --dry-run` at `CILIUM_VERSION`. Nothing is listed twice (`scripts/lib/pltfctl/images.sh`).
 - **The Flux manifest is cached.** It is downloaded once per Flux version to `$TMPDIR` and reused by preloading and by `flux_bootstrap` (`flux_install_manifest` in `scripts/lib/pltfctl/flux.sh`).
 - **Cilium images are referenced by tag, not digest.** `k3d image import` keeps an image's tag but not its registry digest, so a `tag@digest` reference would miss the imported copy and download anyway. Cilium is therefore installed with `useDigest=false` on every image; the tags stay pinned by `CILIUM_VERSION` (`cilium_image_flags` in `scripts/lib/pltfctl/cilium.sh`). Switching digests back on silently disables preloading for Cilium (`docs/contributing/06-invariants.md`).
 - **Best-effort.** If a host pull or the import fails, `up` warns and the nodes pull as they did before.

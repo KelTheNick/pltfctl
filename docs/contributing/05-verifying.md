@@ -17,11 +17,13 @@ There is no offline chart-render suite. Check behaviour against a running cluste
     ./scripts/pltfctl up && ./scripts/pltfctl status            # dev, the default distro
     curl -fsS http://gateway.k3d.workbench.local.gd:8080/readyz
     ./scripts/pltfctl up fleet && ./scripts/pltfctl verify      # acceptance gate for mesh changes
+    ./scripts/pltfctl event-bus up && ./scripts/pltfctl event-bus status   # event-bus changes (lite, dev)
 
 `fleet` has not yet been run end to end on a live machine. A `verify` pass on it is the first
 evidence that a mesh change works, so report the output rather than assuming it.
 
-`status` always exits 0. Gate on `verify`, not `status`.
+`status` always exits 0. Gate on `verify`, not `status`. `event-bus status` is different: it exits
+0 only when every Kafka cluster is Ready, so it can gate event-bus changes.
 
 ---
 

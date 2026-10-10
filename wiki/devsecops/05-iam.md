@@ -25,8 +25,8 @@ The apiserver is bound to `127.0.0.1` on the host, so it is not reachable from o
 
 Flux's controllers run in `flux-system` under the ServiceAccounts and RBAC that Flux's own `install.yaml` creates. pltfctl applies that file as published, at the version pinned in `.env.sbom`, and does not change its RBAC (`scripts/lib/pltfctl/flux.sh`).
 
-- **Dropped controllers.** pltfctl filters out every document labelled for `image-reflector-controller` or `image-automation-controller`, including their ServiceAccounts and Deployments (`flux_drop_image_automation` in `scripts/lib/pltfctl/flux.sh`).
-- **Leftover binding subjects.** The filter matches documents by that component label. Cluster-wide RBAC in `install.yaml` that is not labelled that way is kept, so a ClusterRoleBinding can still list the two dropped ServiceAccounts as subjects. Those subjects point at ServiceAccounts that do not exist, so nothing can authenticate as them. This is harmless.
+- **Dropped controllers.** pltfctl keeps only `source-controller` and `helm-controller`. It filters out every document labelled for `kustomize-controller`, `notification-controller`, `source-watcher`, `image-reflector-controller` or `image-automation-controller`, including their ServiceAccounts and Deployments (`flux_drop_unused_controllers` in `scripts/lib/pltfctl/flux.sh`).
+- **Leftover binding subjects.** The filter matches documents by that component label. Cluster-wide RBAC in `install.yaml` that is not labelled that way is kept, so a ClusterRoleBinding can still list dropped ServiceAccounts as subjects, and the `allow-webhooks` NetworkPolicy still selects the absent notification-controller pods. Those subjects point at ServiceAccounts that do not exist, so nothing can authenticate as them. This is harmless.
 - **Flux applies from the checkout.** `up` applies `deploy/` with your kubeconfig identity, and Flux reconciles the HelmReleases from there. There is no Git source and no deploy key (`scripts/lib/pltfctl/flux.sh`).
 
 ## Cilium identities
@@ -48,13 +48,15 @@ The dashboard is reached over plain HTTP at `[<prefix>-]argus.k3d.workbench.loca
 
 ## Namespaces
 
-Two namespaces split the platform from what runs on it.
+Two namespaces split the platform from what runs on it. A third, `kafka-system`, exists only while the event bus is on.
 
-**`kube-system` is the platform.** Cilium, Hubble, kgateway, the shared Gateway, its `/readyz` route, kube-argus, and the HelmReleases that Flux reconciles for them live here. The Flux sources do not: every `HelmRepository` and `OCIRepository` lives in `flux-system`, and each HelmRelease references its source with `sourceRef.namespace: flux-system` (`deploy/k3d-base/flux-system/repositories.yaml`).
+**`kube-system` is the platform.** Cilium, Hubble (when enabled), kgateway, the shared Gateway, its `/readyz` route, kube-argus, and the HelmReleases that Flux reconciles for them live here. The Flux sources do not: every `HelmRepository` and `OCIRepository` lives in `flux-system`, and each HelmRelease references its source with `sourceRef.namespace: flux-system` (`deploy/k3d-base/flux-system/repositories.yaml`).
 
 **`kube-public` holds sample and test workloads.** The `podinfo` StatefulSet is deployed there on every distro, along with its smoke route. `dev` and `fleet` also export its Service through the mesh. It exercises the platform. Kubernetes creates `kube-public` itself, and it is **world-readable by default**. So only throwaway workloads belong there, never anything sensitive (`deploy/k3d-base/kube-public/podinfo.yaml`, `deploy/k3d-dev/kube-public/podinfo-export.yaml`).
 
 **`pltf-cluster-info` is written to both.** ConfigMaps cannot be referenced across namespaces. `kube-system` holds the canonical copy; `kube-public` holds the copy the sample workloads read. It carries only the cluster's name, which is not sensitive (`pltf_apply_cluster_info` in `scripts/lib/pltfctl/common.sh`).
+
+**`kafka-system` holds the event bus.** `pltfctl event-bus up` creates it with the Strimzi operator and the `strimzi` Kafka cluster; `event-bus down` deletes it. The operator runs under the ServiceAccount and RBAC from the Strimzi chart, unchanged, and watches only `kafka-system`. Strimzi generates the cluster and clients CAs as Secrets in this namespace (`deploy/k3d-dev/kafka-system/`, `scripts/lib/pltfctl/kafka.sh`).
 
 ## Where secrets live
 
@@ -62,6 +64,7 @@ Two namespaces split the platform from what runs on it.
 |---|---|---|---|
 | `cilium-ca` | `kube-system` | Cilium CA cert and private key, identical on every meshed cluster | `scripts/lib/pltfctl/cilium.sh` |
 | Cilium TLS secrets | `kube-system` | secrets Cilium syncs for its policies, pinned here instead of `cilium-secrets` | `scripts/lib/pltfctl/cilium.sh` |
+| Strimzi CAs and the broker certificates | `kafka-system` | the cluster CA and clients CA Strimzi generates for the `tls` listener; gone with `event-bus down` | Strimzi operator |
 | podinfo TLS key | `kube-public` Secret `podinfo-tls` | self-signed, generated on the host by `pltfctl up`; `kube-public` is world-readable, so throwaway only | `scripts/lib/pltfctl/common.sh` |
 
 No credentials are stored in the repo. External chart sources are public and need none (`deploy/k3d-base/flux-system/repositories.yaml`).

@@ -18,6 +18,12 @@ PLTF_K3D_DIR="$PLTFCTL_HOME/infra/k3d"
 # shellcheck disable=SC2034 # consumed by scripts/lib/pltfctl/flux.sh (flux_apply_tree)
 PLTF_DEPLOY_DIR="$PLTFCTL_HOME/deploy"
 
+# Opt-in extras, off by default to save memory on a 16GB laptop:
+#   PLTF_ENABLE=hubble ./scripts/pltfctl up dev
+# `hubble` is Cilium's relay + UI (Cilium distros; read at Cilium install).
+PLTF_ENABLE=${PLTF_ENABLE:-}
+pltf_enabled() { case " $PLTF_ENABLE " in *" $1 "*) return 0 ;; esac; return 1; }
+
 # ----- Distros --------------------------------------------------------------
 # A distro is a fixed posture: which clusters, which CNI, registry or not,
 # o11y or not. All of it is declared in infra/fleet.env (PLTF_DISTRO_*).

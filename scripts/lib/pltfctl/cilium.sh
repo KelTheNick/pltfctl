@@ -66,6 +66,9 @@ cilium_install() { # name
     # `[ -n "$_ci_ip" ]` guard's clearer pltfctl message never runs.
     _ci_ip=$(cilium_node_ip "$_ci_ctx") || _ci_ip=''
     [ -n "$_ci_ip" ] || pltf_die "Could not read a node InternalIP on $_ci_ctx"
+    # Hubble relay + UI are opt-in (PLTF_ENABLE=hubble), read only here at
+    # install. On a running cluster: cilium hubble enable --ui --context <ctx>
+    _ci_hub=false; pltf_enabled hubble && _ci_hub=true
     pltf_step "installing Cilium $CILIUM_VERSION on $_ci_ctx (cluster.id=$_ci_id)"
     # clustermesh.enableEndpointSliceSynchronization=true is Beta upstream;
     # without it, per-pod clusterset.local records for a remote cluster's
@@ -108,8 +111,8 @@ cilium_install() { # name
       --set operator.replicas=1 \
       --set tls.secretsNamespace.name=kube-system \
       --set tls.secretsNamespace.create=false \
-      --set hubble.relay.enabled=true \
-      --set hubble.ui.enabled=true \
+      --set hubble.relay.enabled="$_ci_hub" \
+      --set hubble.ui.enabled="$_ci_hub" \
       --set clustermesh.mcsapi.enabled=true \
       --set clustermesh.mcsapi.corednsAutoConfigure.enabled=true \
       --set clustermesh.enableEndpointSliceSynchronization=true \
