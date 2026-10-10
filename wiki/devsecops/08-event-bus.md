@@ -5,7 +5,7 @@ The event bus is Apache Kafka, run by the Strimzi operator, in the `kafka-system
 ```sh
 ./scripts/pltfctl up dev                # the platform, without Kafka
 ./scripts/pltfctl event-bus up          # same as `event-bus up kraft`
-./scripts/pltfctl event-bus status      # operator, Kafka and per-broker state
+./scripts/pltfctl event-bus status      # operator, Kafka, per-pod state and usage
 ./scripts/pltfctl event-bus down        # removes Kafka, the operator and the bus's data
 ```
 
@@ -24,11 +24,11 @@ The event bus is Apache Kafka, run by the Strimzi operator, in the `kafka-system
   2. Deletes the operator's HelmRelease.
   3. Deletes the namespace, which takes the PVCs with it.
   The Strimzi CRDs stay, because Helm never deletes CRDs.
-- **`event-bus status`:** reports the operator's HelmRelease, each Kafka cluster's `Ready` condition (with the `NotReady` reason), and one line per broker pod with its restart count. The pod's state is one of:
+- **`event-bus status`:** the per-pod breakdown that `pltfctl status` leaves out (`scripts/lib/pltfctl/status.sh`); every other component has the same `pltfctl <component> status` form. It shows the operator's HelmRelease and each Kafka cluster's `Ready` condition, with the `NotReady` reason. It then prints one row per pod in `kafka-system` with its node, state, restarts, CPU, memory, ephemeral disk and PVC usage. The state is one of:
   - `live`: the pod is Ready. Strimzi marks a broker Ready only once its Kafka agent reports the broker `RUNNING`, after log recovery.
   - `starting`: the container is running but not yet Ready.
   - the container's waiting reason, such as `ContainerCreating` or `CrashLoopBackOff`.
-  It exits 0 only when every Kafka cluster is Ready, so scripts can poll it.
+  It exits 0 only when every Kafka cluster and pod is Ready, so scripts can poll it. With no bus on, it exits 1.
 - **Memory:** the budget below has room for one bus. For the multi-cluster picture see `../multi-cluster-kafka-context.md`.
 
 ## Versions

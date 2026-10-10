@@ -1,9 +1,9 @@
 # scripts/
 
 This directory holds the two entrypoints, `pltfctl` and `projctl`. `pltfctl`
-sources eight function-only libraries from `scripts/lib/pltfctl/` (`common.sh`,
-`flux.sh`, `cilium.sh`, `cmds.sh`, `sbom.sh`, `images.sh`, `verify_local.sh`,
-`kafka.sh`) after `scripts/lib/core/log.sh`; `projctl` sources
+sources nine function-only libraries from `scripts/lib/pltfctl/` (`common.sh`,
+`flux.sh`, `cilium.sh`, `cmds.sh`, `status.sh`, `sbom.sh`, `images.sh`,
+`verify_local.sh`, `kafka.sh`) after `scripts/lib/core/log.sh`; `projctl` sources
 `scripts/lib/projctl/`. The comments inside those files state
 constraints — one flag, one wait, one retry shape — without the reasoning
 behind them. This file is that reasoning: the symptom that shows up when the
@@ -357,3 +357,31 @@ because a pool is cluster-wide and claims **existing** LoadBalancer Services,
 not just new ones. Defining one on a running cluster reassigns whatever is
 already there — observed live, where a test pool silently took over the
 platform gateway's Service address.
+
+## Status numbers
+
+You are reading `pltfctl status` and a number looks wrong: a pod's memory is
+far below its request, the PVC column says `-`, or the node totals are
+bigger than every component added together.
+
+Each column has one source, taken once per cluster per run
+(`pltf_status_snapshot` in `scripts/lib/pltfctl/status.sh`):
+
+| Column | Source | Notes |
+| --- | --- | --- |
+| CPU and MEM `use` | kubelet summary API, per node (`/api/v1/nodes/<n>/proxy/stats/summary`) | MEM is the working set, the number the OOM killer acts on. Needs no metrics-server. |
+| `req` and `limit` | the pod spec | `-` when a container sets no memory limit. |
+| DISK | the same summary API, `ephemeral-storage` | logs, writable layer, emptyDir. |
+| PVC `use` | `du` over `/var/lib/rancher/k3s/storage/pvc-*` inside each node container | The summary API does not measure local-path's hostPath volumes, so it is measured on disk. `-` until `du` finds the directory. |
+| PVC `size` | the PVC's capacity, else its request | local-path does not enforce it: a volume can outgrow its size. |
+| `nodes` | `docker stats` and `du -sx /var/lib/rancher/k3s` per node container | What the Docker VM actually pays: k3s itself, containerd, the image store, and on `lite` flannel and kube-proxy, which run inside k3s and have no pods. |
+
+`pltfctl status` prints no tables, only each component's health and a total:
+`components` (the sum of every table) and `nodes`. The per-pod rows come from
+`pltfctl <component> status`. So `nodes` is always larger than `components`. The
+gap is k3s and the image cache, not a missing component.
+
+A component's pods are picked by namespace and pod-name pattern
+(`pltf_component_pods`). A pod that no pattern matches appears in no table.
+When you add a platform workload, add its pattern there or it is invisible.
+

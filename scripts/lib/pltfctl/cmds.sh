@@ -187,69 +187,7 @@ cmd_down() {
   fi
 }
 
-cmd_status() {
-  pltf_require_cmd k3d
-  pltf_require_cmd kubectl
-  k3d cluster list
-  k3d registry list 2>/dev/null || true
-  _found=0
-  for _name in $(pltf_existing_clusters); do
-    _found=1
-    _ctx="k3d-$_name"
-    _port=$(pltf_lb_http_port "$_name")
-    printf '\n== %s (distro %s, LB HTTP :%s) ==\n' "$_ctx" \
-      "$(pltf_cluster_distro "$_name")" "$_port"
-    if ! kubectl --context "$_ctx" version >/dev/null 2>&1; then
-      pltf_info "[fail] kube context $_ctx unreachable"
-      continue
-    fi
-    pltf_ok "kube context $_ctx reachable"
-    if kubectl --context "$_ctx" -n flux-system get deploy helm-controller >/dev/null 2>&1; then
-      pltf_ok "Flux control plane installed"
-    else
-      pltf_info "[fail] Flux not installed; run 'pltfctl up'"
-    fi
-    kubectl --context "$_ctx" -n kube-system get helmrelease 2>/dev/null || true
-    kubectl --context "$_ctx" -n kube-system get gateway 2>/dev/null || true
-    # cilium-cli is required by `up` but not pltf_require_cmd'd here, so a
-    # missing binary must not fall through to `cilium status` below and get
-    # misreported as "[fail] cilium not healthy" — indistinguishable from an
-    # actually unhealthy cluster. `cilium status` below deliberately keeps its
-    # stderr (unlike the kubectl calls above) so a real cilium-cli failure —
-    # changed flag, unreachable context — prints its own reason instead of
-    # collapsing into that same generic message. Do not add 2>/dev/null.
-    if ! pltf_cluster_is "$_name" CNI cilium; then
-      pltf_info "[skip] $_ctx runs flannel + kube-proxy; no cilium/clustermesh checks"
-    elif command -v cilium >/dev/null 2>&1; then
-      cilium status --context "$_ctx" ||
-        pltf_info "[fail] cilium not healthy on $_ctx"
-      if kubectl --context "$_ctx" -n kube-system get deploy clustermesh-apiserver \
-        >/dev/null 2>&1; then
-        clustermesh_status "$_ctx"
-      fi
-    else
-      pltf_info "[skip] cilium-cli not found on PATH; skipping cilium/clustermesh health checks"
-    fi
-    # clusterset.local is MCS-API, which only the cilium distros install.
-    if pltf_cluster_is "$_name" CNI cilium; then
-      if kubectl --context "$_ctx" -n kube-system get configmap coredns \
-        -o jsonpath='{.data.Corefile}' 2>/dev/null | grep -q clusterset.local; then
-        pltf_ok "CoreDNS serves the clusterset.local zone"
-      else
-        pltf_info "[fail] CoreDNS is missing the clusterset.local zone"
-      fi
-    fi
-    if command -v curl >/dev/null 2>&1; then
-      _gw="http://$(pltf_ui_host "$_name" gateway):$_port/readyz"
-      if curl -fsS -m 5 "$_gw" >/dev/null 2>&1; then
-        pltf_ok "gateway responding: $_gw"
-      else
-        pltf_info "[fail] gateway not responding: $_gw"
-      fi
-    fi
-  done
-  [ "$_found" -eq 1 ] || pltf_info "No pltfctl clusters present; run 'pltfctl up'"
-}
+# cmd_status lives in status.sh.
 
 PLTF_PROBE_POD=mesh-probe
 
@@ -554,8 +492,9 @@ cmd_doctor() {
   _rc=0
   # docker + k3d provision the clusters; cilium installs the CNI and meshes
   # the clusters; kubectl drives Flux and the fabric; envsubst renders the k3d
-  # configs; curl probes the smoke routes; openssl makes podinfo's TLS cert.
-  for _c in docker k3d cilium kubectl envsubst curl openssl; do
+  # configs; curl probes the smoke routes; openssl makes podinfo's TLS cert;
+  # jq reads the pod and kubelet JSON behind `status`'s resource tables.
+  for _c in docker k3d cilium kubectl envsubst curl openssl jq; do
     if command -v "$_c" >/dev/null 2>&1; then
       pltf_ok "$_c found ($(command -v "$_c"))"
     else

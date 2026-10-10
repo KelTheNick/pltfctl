@@ -22,7 +22,8 @@ There is no offline chart-render suite. Check behaviour against a running cluste
 `fleet` has not yet been run end to end on a live machine. A `verify` pass on it is the first
 evidence that a mesh change works, so report the output rather than assuming it.
 
-`status` always exits 0. Gate on `verify`, not `status`. `event-bus status` is different: it exits
+`status` always exits 0. Gate on `verify`, not `status`. `<component> status` exits 1 when that
+component is unhealthy. `event-bus status` is different: it exits
 0 only when every Kafka cluster is Ready, so it can gate event-bus changes.
 
 ---

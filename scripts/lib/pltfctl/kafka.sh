@@ -79,16 +79,10 @@ cmd_event_bus_up() { # bus
 # Liveness / start-up state: operator, each Kafka cluster's Ready condition,
 # then every broker pod. A broker pod is Ready only once Strimzi's Kafka agent
 # reports the broker RUNNING (log recovery done), so "not ready, no waiting
-# reason" means the broker process is up but still starting. Exit 0 only when
-# every Kafka cluster is Ready.
-cmd_event_bus_status() {
-  _eb_name=$(pltf_event_bus_cluster)
-  _eb_ctx="k3d-$_eb_name"
-  _eb_k="kubectl --context $_eb_ctx -n $PLTF_EVENT_BUS_NS"
-  if ! kubectl --context "$_eb_ctx" get ns "$PLTF_EVENT_BUS_NS" >/dev/null 2>&1; then
-    pltf_info "No event bus on $_eb_ctx (start one with: pltfctl event-bus up)"
-    return 1
-  fi
+# reason" means the broker process is up but still starting. Non-zero unless
+# every Kafka cluster is Ready. `pltfctl status` calls this.
+pltf_event_bus_health() { # ctx
+  _eb_k="kubectl --context $1 -n $PLTF_EVENT_BUS_NS"
   _eb_rc=0
 
   _eb_op=$($_eb_k get helmrelease strimzi-operator \
@@ -112,19 +106,19 @@ cmd_event_bus_status() {
       pltf_info "[fail] kafka: $_eb_kc not Ready${_eb_why:+ — $_eb_why}"
       _eb_rc=1
     fi
-    # One line per broker pod: phase, readiness, restarts, and the container's
-    # waiting reason (ContainerCreating, CrashLoopBackOff, ...) if any.
-    $_eb_k get pods -l "strimzi.io/cluster=$_eb_kc,strimzi.io/broker-role=true" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{" "}{.status.containerStatuses[0].ready}{" "}{.status.containerStatuses[0].restartCount}{" "}{.status.containerStatuses[0].state.waiting.reason}{"\n"}{end}' |
-      while read -r _p _ph _rd _rs _wt; do
-        if [ "$_rd" = true ]; then _s=live
-        elif [ -n "${_wt:-}" ]; then _s=$_wt
-        elif [ "$_ph" = Running ]; then _s=starting
-        else _s=$_ph
-        fi
-        printf '       %-26s %-18s restarts=%s\n' "$_p" "$_s" "${_rs:-0}"
-      done
   done
   return "$_eb_rc"
+}
+
+# The per-pod lines (state, restarts, CPU, memory, disk, PVCs) come from the
+# status table. Exit 1 when no bus is on, or it is not Ready.
+cmd_event_bus_status() {
+  _eb_name=$(pltf_event_bus_cluster)
+  if ! kubectl --context "k3d-$_eb_name" get ns "$PLTF_EVENT_BUS_NS" >/dev/null 2>&1; then
+    pltf_info "No event bus on k3d-$_eb_name (start one with: pltfctl event-bus up)"
+    return 1
+  fi
+  cmd_status event-bus
 }
 
 # Kafka first, so the operator is still there to tear down what it created;

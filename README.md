@@ -55,6 +55,7 @@ You need Docker running, plus these command-line tools on your `PATH`:
 | `envsubst` | fills in the k3d config templates | `brew install gettext` |
 | `curl` | downloads manifests, checks routes | preinstalled |
 | `openssl` | makes podinfo's self-signed TLS cert | preinstalled |
+| `jq` | reads the pod and kubelet data behind `status` | `brew install jq` |
 
 `helm` (pushing charts to the local registry) and `flux` (debugging) are
 optional. On Ubuntu, use your package manager or each tool's install docs
@@ -65,7 +66,9 @@ Then, from the repo root:
 ```sh
 ./scripts/pltfctl doctor          # checks the tools above and the version pins
 ./scripts/pltfctl up              # same as `up dev`; or `up lite`, `up fleet`
-./scripts/pltfctl status          # cluster, Flux, gateway and Cilium health
+./scripts/pltfctl status          # every component's health, then total CPU, memory, disk
+./scripts/pltfctl gateway status  # one component, per pod: nodes, cni, mesh, core, flux,
+                                  #   gateway, dashboard, samples, event-bus
 ./scripts/pltfctl open            # lists the UI URLs; `open argus` opens one
 ./scripts/pltfctl verify          # proves HTTP, TCP, TLS and gRPC work
 ./scripts/pltfctl event-bus up    # optional: adds Kafka (lite, dev); `event-bus status`, `event-bus down`
@@ -78,6 +81,8 @@ Then, from the repo root:
   apply changed settings to an existing cluster; for that, `down` and `up`.
 - **`down` removes every pltfctl cluster,** not just the one you last started.
 - **`status` always exits 0.** Use `verify` when you need a pass or fail.
+  `<component> status` is the exception: it exits 1 when that component is
+  unhealthy.
 - **The first `up` is the slowest.** It downloads every image once; later runs
   copy them from your Docker cache.
 

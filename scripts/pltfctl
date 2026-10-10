@@ -69,6 +69,9 @@ _cilium_override=${CILIUM_VERSION:-}
 # shellcheck source=lib/pltfctl/cmds.sh
 . "$PLTFCTL_HOME/scripts/lib/pltfctl/cmds.sh"
 # shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/status.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/status.sh"
+# shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/pltfctl/sbom.sh
 . "$PLTFCTL_HOME/scripts/lib/pltfctl/sbom.sh"
 # shellcheck source-path=SCRIPTDIR
@@ -100,7 +103,10 @@ usage() {
 Usage:
   pltfctl up [lite|dev|fleet]   Stand a distro up. Default: dev.
   pltfctl down                  Delete every pltfctl cluster (+ the registry).
-  pltfctl status                Cluster, registry, Flux and fabric health.
+  pltfctl status                Every component's health, then their total
+                                CPU, memory and disk.
+  pltfctl <component> status    One component: nodes cni mesh core flux gateway
+                                dashboard samples event-bus. Exit 1 if unhealthy.
   pltfctl open [ui] [cluster]   List the fabric UIs, or open one in a browser.
   pltfctl verify                In-cluster: HTTP, TCP, TLS, gRPC. One cluster: Jobs in
                                 default hit podinfo in kube-public. Fleet: the
@@ -110,8 +116,9 @@ Usage:
   pltfctl event-bus up [kraft]  Add the event bus to the running distro (lite,
                                 dev). Default: kraft (Strimzi Kafka, KRaft).
   pltfctl event-bus down        Remove the event bus and its data.
-  pltfctl event-bus status      Operator, Kafka and per-broker state (live,
-                                starting, CrashLoopBackOff...). Exit 0 when Ready.
+  pltfctl event-bus status      Operator, Kafka, and
+                                each pod's state (live, starting,
+                                CrashLoopBackOff...) and usage. Exit 0 when Ready.
 
 Distros (one at a time; values in infra/fleet.env):
   lite   k3d-lite           flannel + kube-proxy, no registry.
@@ -214,7 +221,16 @@ main() {
       esac
       ;;
     -h | --help | help) usage ;;
-    *) pltf_die "Unknown subcommand: $subcmd" ;;
+    *)
+      # `pltfctl <component> status`, the shape `event-bus status` set.
+      # event-bus keeps its own case above for up/down.
+      pltf_component_known "$subcmd" || pltf_die "Unknown subcommand: $subcmd"
+      case "${1:-}" in
+        status) shift; require_no_args "$@"; cmd_status "$subcmd" ;;
+        -h | --help) usage ;;
+        *) pltf_die "Usage: pltfctl $subcmd status" ;;
+      esac
+      ;;
   esac
 }
 
