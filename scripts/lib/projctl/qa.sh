@@ -37,9 +37,21 @@ proj_fail() { pltf_info "[fail] $*"; _pc_rc=1; }
 proj_check() {
   [ $# -eq 0 ] || pltf_die "check takes no arguments"
   _pc_rc=0
-  _all=''; _cl=''; _cni=''
+  _all=''; _cl=''; _cni=''; _kind=''; _proj=''
   for _d in $PLTF_DISTROS; do
     _du=$(printf '%s' "$_d" | tr '[:lower:]' '[:upper:]')
+    eval "_kind=\${PLTF_DISTRO_${_du}_KIND:-k3d}"
+    case "$_kind" in
+      k3d) ;;
+      compose)
+        # A Compose distro has no clusters: one stack file and a project name.
+        [ -f "$PLTFCTL_HOME/infra/compose/$_d.yaml" ] ||
+          proj_fail "infra/compose/$_d.yaml missing for compose distro '$_d'"
+        eval "_proj=\${PLTF_${_du}_PROJECT:-}"
+        [ -n "$_proj" ] || proj_fail "infra/fleet.env: PLTF_${_du}_PROJECT unset"
+        continue ;;
+      *) proj_fail "infra/fleet.env: PLTF_DISTRO_${_du}_KIND must be k3d|compose (got '$_kind')"; continue ;;
+    esac
     eval "_cl=\${PLTF_DISTRO_${_du}_CLUSTERS:-}"
     eval "_cni=\${PLTF_DISTRO_${_du}_CNI:-}"
     [ -n "$_cl" ] || { proj_fail "infra/fleet.env: PLTF_DISTRO_${_du}_CLUSTERS unset"; continue; }

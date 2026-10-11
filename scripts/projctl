@@ -54,8 +54,8 @@ Usage:
   projctl clean [-f]               List (default) or delete (-f) scratch files:
                                    tmp/, *.tmp, *.bak, *.orig, *.log.
 
-<ctx> is k3d-base (shared by every distro) or one context: k3d-lite, k3d-dev,
-k3d-op-1, k3d-op-2, k3d-op-3. k3d-op-1 links its namespaces to k3d-dev's and
+<ctx> is k3d-base (shared by every k3d distro) or one context: k3d-lite,
+k3d-op-1, k3d-op-2, k3d-op-3. k3d-op-1 links its namespaces to k3d-lite's and
 k3d-op-2/3 link to k3d-op-1's, so scaffolding into a linked namespace changes
 every context sharing it. Use a new namespace to diverge per context.
 USAGE

@@ -20,14 +20,14 @@
 </div>
 
 `pltfctl` is a Developer Workstation quickstart. It gives you a local,
-throwaway Kubernetes environment (via [k3d](https://k3d.io)) on a MacBook or
-Ubuntu workstation, in one of three distros: `lite` (one cluster, k3s's own
-networking), `dev` (the default: one cluster on Cilium, with a local OCI
-registry) or `fleet` (three Cilium clusters meshed together). Every distro
-runs a GitOps operator ([Flux](https://fluxcd.io), in `flux-system`), an API
-gateway (KGateway) and a Kubernetes dashboard (Kube-Argus) in `kube-system`, and
-a podinfo test server in `kube-public`. On `dev` and `fleet`, Cilium is
-installed by `cilium-cli` before Flux. Bring it up and tear it down with a
+throwaway environment on a MacBook or Ubuntu workstation, in one of three
+distros: `lite` (the default: one [k3d](https://k3d.io) cluster on Cilium, 1
+server + 3 agents, with a local OCI registry), `fleet` (three Cilium k3d
+clusters meshed together) or `dev` (no Kubernetes: a Docker Compose stack of
+AutoMQ, Kafka on S3, over RustFS). Every k3d distro runs a GitOps operator
+([Flux](https://fluxcd.io), in `flux-system`), an API gateway (KGateway) and a
+Kubernetes dashboard (Kube-Argus) in `kube-system`, and a podinfo test server in
+`kube-public`; Cilium is installed by `cilium-cli` before Flux. Bring it up and tear it down with a
 single command, then develop against it as you would the real thing.
 
 --------------------------------------------------
@@ -49,9 +49,10 @@ You need Docker running, plus these command-line tools on your `PATH`:
 | Tool | Used for | Install (macOS) |
 | --- | --- | --- |
 | `docker` | runs every cluster node as a container | Docker Desktop or OrbStack |
+| `docker compose` | runs the `dev` stack (Compose v2 plugin) | ships with Docker Desktop / OrbStack |
 | `k3d` | creates and deletes the k3s clusters | `brew install k3d` |
 | `kubectl` | talks to the clusters | `brew install kubectl` |
-| `cilium` | installs Cilium on `dev` and `fleet` | `brew install cilium-cli` |
+| `cilium` | installs Cilium on `lite` and `fleet` | `brew install cilium-cli` |
 | `envsubst` | fills in the k3d config templates | `brew install gettext` |
 | `curl` | downloads manifests, checks routes | preinstalled |
 | `openssl` | makes podinfo's self-signed TLS cert | preinstalled |
@@ -65,21 +66,34 @@ Then, from the repo root:
 
 ```sh
 ./scripts/pltfctl doctor          # checks the tools above and the version pins
-./scripts/pltfctl up              # same as `up dev`; or `up lite`, `up fleet`
+./scripts/pltfctl up              # same as `up lite`; or `up fleet`, `up dev`
 ./scripts/pltfctl status          # every component's health, then total CPU, memory, disk
 ./scripts/pltfctl gateway status  # one component, per pod: nodes, cni, mesh, core, flux,
                                   #   gateway, dashboard, samples, event-bus
 ./scripts/pltfctl open            # lists the UI URLs; `open argus` opens one
 ./scripts/pltfctl verify          # proves HTTP, TCP, TLS and gRPC work
-./scripts/pltfctl event-bus up    # optional: adds Kafka (lite, dev); `event-bus status`, `event-bus down`
-./scripts/pltfctl down            # deletes every pltfctl cluster
+./scripts/pltfctl event-bus up    # optional: adds Kafka (lite only); `event-bus status`, `event-bus down`
+./scripts/pltfctl event-topic grant app orders   # a topic's client identity: mTLS cert, ACLs, quotas
+./scripts/pltfctl down            # deletes every pltfctl cluster and stack, then prunes Docker
 ```
 
 - **One distro at a time.** The distros reuse the same host ports, so `up`
   refuses to start a second distro while another is running. Run `down` first.
 - **`up` is safe to re-run.** It skips whatever already exists. It does not
   apply changed settings to an existing cluster; for that, `down` and `up`.
-- **`down` removes every pltfctl cluster,** not just the one you last started.
+- **`down` removes every pltfctl cluster,** not just the one you last started:
+  every k3d cluster (including a `dev` cluster left by an older pltfctl), the
+  registry, the `dev` Compose stack and its volumes, and the shared network.
+- **`down` then prunes Docker host-wide.** It runs `docker system prune -f` and
+  `docker volume prune -f`, which remove *every* stopped container, unused
+  network, dangling image, the build cache and every unused anonymous volume on
+  the machine, not only pltfctl's. Stop here if you keep stopped containers or
+  anonymous volumes you care about.
+- **On `dev`,** `verify` and `open` cover the Compose stack; `status` and
+  component status only print that they are not available in dev mode (k3d
+  distros only); `event-bus` and `event-topic` need `lite`. See
+  [wiki/developer/](wiki/developer/00-index.md). `pltfctl up dev`, the renamed
+  `lite` and `down` with its prune have not yet been run live.
 - **`status` always exits 0.** Use `verify` when you need a pass or fail.
   `<component> status` is the exception: it exits 1 when that component is
   unhealthy.
@@ -101,6 +115,7 @@ infra/              what the project creates
   fleet.env         the source of truth: distros, clusters, ports, CIDRs, registry,
                     event-bus kinds
   k3d/<distro>/     k3d cluster templates, filled in from fleet.env
+  compose/<distro>.yaml  Compose stacks (the `dev` distro)
   network/          the DNS resolver every node uses
 deploy/             what runs on the clusters (Flux resources and manifests)
   k3d-base/         applied to every distro, by namespace
@@ -126,7 +141,7 @@ assets/icons/       the banner icons above
 
 ## How do I publish a chart to the local registry?
 
-An OCI registry rides with the `dev` and `fleet` distros (not `lite`). Two
+An OCI registry rides with the `lite` and `fleet` distros (not `dev`). Two
 addresses, one target:
 `localhost:5001` from the host, `oci-registry:5000` in-cluster (inside a
 pod, `localhost` means the pod itself; k3d does not prefix the registry's own
@@ -138,7 +153,7 @@ helm push my-chart-0.1.0.tgz oci://localhost:5001/charts
 ```
 
 Deploy it with a HelmRelease referencing the `oci-registry` HelmRepository
-(already declared in `deploy/k3d-dev/flux-system/registry.yaml`; Flux sources
+(already declared in `deploy/k3d-lite/flux-system/registry.yaml`; Flux sources
 live in `flux-system`, so the release names that namespace):
 
 ```yaml

@@ -25,6 +25,9 @@ PLTF_UIS='argus hubble podinfo gateway'
 # Refuse to start a distro while a DIFFERENT one is running: distros share
 # host ports, so the second create would fail half-way with a bind error.
 pltf_guard_one_distro() { # distro
+  _gd_legacy=$(pltf_existing_clusters "$PLTF_LEGACY_CLUSTERS" | paste -sd' ' -)
+  [ -z "$_gd_legacy" ] ||
+    pltf_die "k3d cluster(s) from an older pltfctl are running: $_gd_legacy. Run 'pltfctl down' first."
   _gd_running=$(pltf_running_distro) || return 0
   [ "$_gd_running" = "$1" ] && return 0
   pltf_die "Distro '$_gd_running' is running; distros share host ports. Run 'pltfctl down' first."
@@ -57,6 +60,14 @@ pltf_up_k3d() { # name
 
 cmd_up() { # distro
   _distro=${1:-$PLTF_DEFAULT_DISTRO}
+  pltf_distro_known "$_distro" ||
+    pltf_die "Unknown distro: $_distro (expected: $(pltf_distro_names))"
+  if [ "$(pltf_distro_kind "$_distro")" = compose ]; then
+    pltf_require_cmd docker
+    pltf_guard_one_distro "$_distro"
+    cmd_up_compose "$_distro"
+    return
+  fi
   _clusters=$(pltf_distro_clusters "$_distro") ||
     pltf_die "Unknown distro: $_distro (expected: $(pltf_distro_names))"
   _cni=$(pltf_distro "$_distro" CNI)
@@ -160,30 +171,41 @@ pltf_up_mesh() { # clusters (newline-separated)
   done
 }
 
+# Everything pltfctl runs, then a host-wide Docker prune: every pltfctl k3d
+# cluster (current and legacy names), every Compose distro's stack and its
+# volumes, the registry and the shared network. The prune is NOT scoped to
+# pltfctl: it removes every stopped container, unused network, dangling image
+# and build cache on the host, and every unused anonymous volume.
 cmd_down() {
-  pltf_require_cmd k3d
-  _found=0
-  for _name in $(pltf_existing_clusters); do
-    _found=1
-    pltf_step "k3d cluster delete $_name"
-    k3d cluster delete "$_name"
-    pltf_kube_unset_user "$_name"
-  done
-  # The registry is cluster-managed (created by the distro's first cluster)
-  # and normally dies with it; delete any imperative leftover so the next
-  # `up` never hits a name/port collision.
-  if pltf_registry_exists; then
-    pltf_step "k3d registry delete $PLTF_REGISTRY_NAME"
-    k3d registry delete "$PLTF_REGISTRY_NAME" || true
+  pltf_require_cmd docker
+  _down_found=0
+  if command -v k3d >/dev/null 2>&1; then
+    for _name in $(pltf_existing_clusters "$PLTF_ALL_CLUSTERS $PLTF_LEGACY_CLUSTERS"); do
+      _down_found=1
+      pltf_step "k3d cluster delete $_name"
+      k3d cluster delete "$_name"
+      pltf_kube_unset_user "$_name"
+    done
+    # The registry is cluster-managed (created by the distro's first cluster)
+    # and normally dies with it; delete any imperative leftover so the next
+    # `up` never hits a name/port collision.
+    if pltf_registry_exists; then
+      pltf_step "k3d registry delete $PLTF_REGISTRY_NAME"
+      k3d registry delete "$PLTF_REGISTRY_NAME" || true
+    fi
   fi
+  docker compose version >/dev/null 2>&1 && pltf_down_compose
   # k3d can leave the shared cluster network behind when the registry still had
   # an endpoint at delete time, and it never garbage-collects a network it did
   # not create. Remove it quietly.
   docker network rm "$PLTF_NETWORK" >/dev/null 2>&1 || true
-  if [ "$_found" -eq 1 ]; then
-    pltf_ok "All pltfctl clusters are down."
+  pltf_step "docker system prune -f; docker volume prune -f (host-wide)"
+  docker system prune -f >/dev/null || pltf_info "[warn] docker system prune failed"
+  docker volume prune -f >/dev/null || pltf_info "[warn] docker volume prune failed"
+  if [ "$_down_found" -eq 1 ]; then
+    pltf_ok "Everything pltfctl ran is down; Docker pruned."
   else
-    pltf_info "No pltfctl clusters present; nothing to delete"
+    pltf_info "Nothing of pltfctl's was running; Docker pruned."
   fi
 }
 
@@ -441,6 +463,10 @@ pltf_verify_from() { # probe_ctx probe_name target_name...
 }
 
 cmd_verify() {
+  if _vd=$(pltf_running_distro) && [ "$(pltf_distro_kind "$_vd")" = compose ]; then
+    cmd_verify_compose "$_vd"
+    return
+  fi
   pltf_require_cmd k3d
   pltf_require_cmd kubectl
   _fleet=$(pltf_existing_clusters | tr '\n' ' ')
@@ -449,7 +475,7 @@ cmd_verify() {
   _fleet_n=0
   for _c in $_fleet; do _fleet_n=$((_fleet_n + 1)); done
   [ "$_fleet_n" -ge 1 ] || pltf_die "No pltfctl cluster is running; run 'pltfctl up'"
-  # One cluster (lite, dev): the same four protocols, client and server in
+  # One cluster (lite): the same four protocols, client and server in
   # different namespaces of that cluster. See scripts/lib/pltfctl/verify_local.sh
   if [ "$_fleet_n" -eq 1 ]; then
     cmd_verify_local "$(printf '%s' "$_fleet" | tr -d ' ')"
@@ -507,6 +533,13 @@ cmd_doctor() {
       _rc=1
     fi
   done
+  # The dev distro is a Compose stack: Docker's v2 plugin, not docker-compose.
+  if docker compose version >/dev/null 2>&1; then
+    pltf_ok "docker compose found ($(docker compose version --short 2>/dev/null))"
+  else
+    pltf_info "[missing] docker compose (v2 plugin; needed by the dev distro)"
+    _rc=1
+  fi
   # Optional: helm pushes charts to the local registry; the flux CLI helps
   # debugging. Neither is needed by up/down/status.
   for _c in helm flux; do
@@ -523,7 +556,7 @@ cmd_doctor() {
 }
 
 # The UIs a cluster actually serves: hubble needs Cilium and is opt-in
-# (PLTF_ENABLE=hubble), so it is absent on lite and by default.
+# (PLTF_ENABLE=hubble), so it is absent by default.
 pltf_uis_for() { # name
   for _u in $PLTF_UIS; do
     if [ "$_u" = hubble ] && { ! pltf_cluster_is "$1" CNI cilium || ! pltf_enabled hubble; }; then continue; fi
@@ -538,6 +571,13 @@ cmd_open() { # [ui|cluster] [cluster]
   _op_ui=''
   # Default: the running distro's first cluster, else the default distro's.
   _op_distro=$(pltf_running_distro) || _op_distro=$PLTF_DEFAULT_DISTRO
+  # A Compose distro serves no routed UIs; its endpoints are host ports.
+  if [ "$(pltf_distro_kind "$_op_distro")" = compose ]; then
+    [ "$#" -eq 0 ] || pltf_die "The $_op_distro distro has no routed UIs; run 'pltfctl open' for its endpoints"
+    pltf_info "Endpoints of the $_op_distro distro (Compose)"
+    pltf_compose_endpoints
+    return 0
+  fi
   _op_cluster=$(pltf_distro_clusters "$_op_distro" | head -n 1)
   _op_known=$(printf '%s' "$PLTF_ALL_CLUSTERS" | tr ' ' '|')
 

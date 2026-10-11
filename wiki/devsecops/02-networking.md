@@ -6,20 +6,21 @@ This page covers how pods get addresses, how traffic is routed inside and betwee
 
 | Distro | CNI | kube-proxy | NetworkPolicy controller |
 |---|---|---|---|
-| `lite` | flannel (k3s default) | yes (k3s default) | k3s default |
-| `dev`, `fleet` | Cilium (eBPF) | no, Cilium replaces it | disabled in k3s |
+| `lite`, `fleet` | Cilium (eBPF) | no, Cilium replaces it | disabled in k3s |
 
-Sources: `infra/fleet.env`, `infra/k3d/lite/lite.yaml`, `infra/k3d/dev/dev.yaml`, `infra/k3d/fleet/*.yaml`.
+Sources: `infra/fleet.env`, `infra/k3d/lite/lite.yaml`, `infra/k3d/fleet/*.yaml`.
+
+No distro uses flannel today; `PLTF_DISTRO_<D>_CNI=flannel` is still a valid value.
 
 On Cilium distros the k3s server runs with `--flannel-backend=none`, `--disable-network-policy` and `--disable-kube-proxy`. Nodes stay `NotReady` until `cilium install` runs. Cilium is installed with `kubeProxyReplacement=true` (`scripts/lib/pltfctl/cilium.sh`).
 
-Consequence: on `dev` and `fleet`, any tool that works by editing kube-proxy's iptables rules has nothing to edit. Submariner is the case that surfaced this. Do not record it as "Cilium conflicts with Submariner": Cilium runs alongside kube-proxy perfectly well and does not need to replace it. Replacing kube-proxy is pltfctl's choice, not a Cilium limitation. Undoing it needs a rebuild and two changes together: drop `--flannel-backend=none` and `--disable-kube-proxy` from the distro's k3d template, and set `PLTF_DISTRO_<D>_CNI=flannel` in `infra/fleet.env` so Cilium is not installed. Changing only `CNI` would leave the cluster with no network at all.
+Consequence: on `lite` and `fleet`, any tool that works by editing kube-proxy's iptables rules has nothing to edit. Submariner is the case that surfaced this. Do not record it as "Cilium conflicts with Submariner": Cilium runs alongside kube-proxy perfectly well and does not need to replace it. Replacing kube-proxy is pltfctl's choice, not a Cilium limitation. Undoing it needs a rebuild and two changes together: drop `--flannel-backend=none` and `--disable-kube-proxy` from the distro's k3d template, and set `PLTF_DISTRO_<D>_CNI=flannel` in `infra/fleet.env` so Cilium is not installed. Changing only `CNI` would leave the cluster with no network at all.
 
 ## CIDRs
 
 | Cluster | Pod CIDR | Service CIDR | Cluster DNS |
 |---|---|---|---|
-| `lite`, `dev`, `op-1` | 10.42.0.0/16 | 10.43.0.0/16 | 10.43.0.10 |
+| `lite`, `op-1` | 10.42.0.0/16 | 10.43.0.0/16 | 10.43.0.10 |
 | `op-2` | 10.44.0.0/16 | 10.45.0.0/16 | 10.45.0.10 |
 | `op-3` | 10.46.0.0/16 | 10.47.0.0/16 | 10.47.0.10 |
 
@@ -31,7 +32,7 @@ Source: `infra/fleet.env`.
 
 Cilium must reach the apiserver before any CNI or cluster DNS exists, so `k8sServiceHost` is an IP, not a Service VIP or a container name. It is the InternalIP of the node selected with `node-role.kubernetes.io/control-plane` (`cilium_node_ip` in `scripts/lib/pltfctl/cilium.sh`).
 
-- Without the role selector, the first node in the list can be an agent (on `dev`). The `cilium-agent` config init container then cannot reach the apiserver and crashloops in a way that looks like an eBPF failure.
+- Without the role selector, the first node in the list can be an agent (on `lite`). The `cilium-agent` config init container then cannot reach the apiserver and crashloops in a way that looks like an eBPF failure.
 - The k3d serverlb (the load-balancer container in front of the cluster) is not an alternative: its IP is not in the apiserver certificate's SANs, and its name cannot resolve before cluster DNS exists (`scripts/README.md`).
 
 ## The cgroup flag pair
@@ -72,7 +73,7 @@ MCS-API (the Kubernetes Multi-Cluster Services API) gives exported services a cr
 
 `clustermesh.enableEndpointSliceSynchronization=true` (Beta upstream) mirrors a remote cluster's per-pod EndpointSlices locally. Without it, service-level `clusterset.local` names work but per-pod names (for example `podinfo-0.<cluster>.podinfo.kube-public.svc.clusterset.local`) never resolve (`scripts/README.md`).
 
-The sync annotation must sit on the `ServiceExport`, not the `Service`. Setting it in both places merges both clusters' pod IPs under the same hostnames (`deploy/k3d-dev/kube-public/podinfo-export.yaml`).
+The sync annotation must sit on the `ServiceExport`, not the `Service`. Setting it in both places merges both clusters' pod IPs under the same hostnames (`deploy/k3d-lite/kube-public/podinfo-export.yaml`).
 
 `clustermesh connect --wait` proves only connectivity, not that mirroring has finished. `pltf_wait_mesh_mirrors` waits (up to 120s) until the destination carries at least as many mirrored EndpointSlices as the source has ServiceExports. Without it, a `verify` straight after `up` was measured seeing 0/N (`scripts/lib/pltfctl/cilium.sh`, `scripts/README.md`).
 
@@ -86,10 +87,10 @@ All host ports bind to the workstation. See [Gateways](03-gateways.md) for the L
 
 | Cluster | API | LB HTTP | LB HTTPS (reserved) |
 |---|---|---|---|
-| `lite`, `dev`, `op-1` | 6550 | 8080 | 8443 |
+| `lite`, `op-1` | 6550 | 8080 | 8443 |
 | `op-2` | 6551 | 9080 | 9443 |
 | `op-3` | 6552 | 7080 | 7443 |
-| registry (`dev`, `op-1`) | 5001 | | |
+| registry (`lite`, `op-1`) | 5001 | | |
 
 The API binds to `127.0.0.1` under the host name `k3d.local.gd`, which resolves to `127.0.0.1`. The registry's `host` is `0.0.0.0` (`infra/fleet.env`, `infra/k3d/*/*.yaml`).
 

@@ -4,7 +4,7 @@ This page covers who and what can act on the clusters: the human's kubeconfig id
 
 ## Kubeconfig contexts
 
-k3d writes one context per cluster into the default kubeconfig. Contexts are named `k3d-<cluster>`: `k3d-lite`, `k3d-dev`, `k3d-op-1`, `k3d-op-2`, `k3d-op-3` (`infra/k3d/*/*.yaml`, `scripts/lib/pltfctl/common.sh`).
+k3d writes one context per cluster into the default kubeconfig. Contexts are named `k3d-<cluster>`: `k3d-lite`, `k3d-op-1`, `k3d-op-2`, `k3d-op-3` (`infra/k3d/*/*.yaml`, `scripts/lib/pltfctl/common.sh`).
 
 | Setting | Value | Effect |
 |---|---|---|
@@ -52,11 +52,11 @@ Two namespaces split the platform from what runs on it. A third, `kafka-system`,
 
 **`kube-system` is the platform.** Cilium, Hubble (when enabled), kgateway, the shared Gateway, its `/readyz` route, kube-argus, and the HelmReleases that Flux reconciles for them live here. The Flux sources do not: every `HelmRepository` and `OCIRepository` lives in `flux-system`, and each HelmRelease references its source with `sourceRef.namespace: flux-system` (`deploy/k3d-base/flux-system/repositories.yaml`).
 
-**`kube-public` holds sample and test workloads.** The `podinfo` StatefulSet is deployed there on every distro, along with its smoke route. `dev` and `fleet` also export its Service through the mesh. It exercises the platform. Kubernetes creates `kube-public` itself, and it is **world-readable by default**. So only throwaway workloads belong there, never anything sensitive (`deploy/k3d-base/kube-public/podinfo.yaml`, `deploy/k3d-dev/kube-public/podinfo-export.yaml`).
+**`kube-public` holds sample and test workloads.** The `podinfo` StatefulSet is deployed there on every distro, along with its smoke route. `lite` and `fleet` also export its Service through the mesh. It exercises the platform. Kubernetes creates `kube-public` itself, and it is **world-readable by default**. So only throwaway workloads belong there, never anything sensitive (`deploy/k3d-base/kube-public/podinfo.yaml`, `deploy/k3d-lite/kube-public/podinfo-export.yaml`).
 
 **`pltf-cluster-info` is written to both.** ConfigMaps cannot be referenced across namespaces. `kube-system` holds the canonical copy; `kube-public` holds the copy the sample workloads read. It carries only the cluster's name, which is not sensitive (`pltf_apply_cluster_info` in `scripts/lib/pltfctl/common.sh`).
 
-**`kafka-system` holds the event bus.** `pltfctl event-bus up` creates it with the Strimzi operator and the `strimzi` Kafka cluster; `event-bus down` deletes it. The operator runs under the ServiceAccount and RBAC from the Strimzi chart, unchanged, and watches only `kafka-system`. Strimzi generates the cluster and clients CAs as Secrets in this namespace (`deploy/k3d-dev/kafka-system/`, `scripts/lib/pltfctl/kafka.sh`).
+**`kafka-system` holds the event bus.** `pltfctl event-bus up` creates it with the Strimzi operator and the `strimzi` Kafka cluster; `event-bus down` deletes it. The operator runs under the ServiceAccount and RBAC from the Strimzi chart, unchanged, and watches only `kafka-system`. Strimzi generates the cluster and clients CAs as Secrets in this namespace (`deploy/k3d-lite/kafka-system/`, `scripts/lib/pltfctl/kafka.sh`).
 
 ## Where secrets live
 
@@ -65,6 +65,7 @@ Two namespaces split the platform from what runs on it. A third, `kafka-system`,
 | `cilium-ca` | `kube-system` | Cilium CA cert and private key, identical on every meshed cluster | `scripts/lib/pltfctl/cilium.sh` |
 | Cilium TLS secrets | `kube-system` | secrets Cilium syncs for its policies, pinned here instead of `cilium-secrets` | `scripts/lib/pltfctl/cilium.sh` |
 | Strimzi CAs and the broker certificates | `kafka-system` | the cluster CA and clients CA Strimzi generates for the `tls` listener; gone with `event-bus down` | Strimzi operator |
+| Kafka client credentials | `kafka-system` Secret `<user>`, and `.kafka-creds/` on the host | each KafkaUser's key and certificate; the host copy is gitignored, mode 600, removed by `event-topic revoke` | `scripts/lib/pltfctl/topic.sh` |
 | podinfo TLS key | `kube-public` Secret `podinfo-tls` | self-signed, generated on the host by `pltfctl up`; `kube-public` is world-readable, so throwaway only | `scripts/lib/pltfctl/common.sh` |
 
 No credentials are stored in the repo. External chart sources are public and need none (`deploy/k3d-base/flux-system/repositories.yaml`).
@@ -73,6 +74,7 @@ No credentials are stored in the repo. External chart sources are public and nee
 
 These are facts about the current state, not a plan.
 
+- Kafka's `plain` listener has no identity; only the `tls` listener enforces KafkaUser ACLs ([Event bus](08-event-bus.md#identities)).
 - The only human identity is the k3d admin user. There are no per-person users, groups or OIDC login.
 - The registry has no authentication. Anyone who can reach `localhost:5001` can push and pull.
 - kube-argus has no configured login; anyone who can reach the Gateway gets the `viewer` role.

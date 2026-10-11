@@ -19,7 +19,7 @@ PLTF_K3D_DIR="$PLTFCTL_HOME/infra/k3d"
 PLTF_DEPLOY_DIR="$PLTFCTL_HOME/deploy"
 
 # Opt-in extras, off by default to save memory on a 16GB laptop:
-#   PLTF_ENABLE=hubble ./scripts/pltfctl up dev
+#   PLTF_ENABLE=hubble ./scripts/pltfctl up lite
 # `hubble` is Cilium's relay + UI (Cilium distros; read at Cilium install).
 PLTF_ENABLE=${PLTF_ENABLE:-}
 pltf_enabled() { case " $PLTF_ENABLE " in *" $1 "*) return 0 ;; esac; return 1; }
@@ -35,7 +35,7 @@ pltf_enabled() { case " $PLTF_ENABLE " in *" $1 "*) return 0 ;; esac; return 1; 
 
 pltf_upper() { printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_'; } # op-1 -> OP_1
 
-# `pltf_distro dev CNI` reads PLTF_DISTRO_DEV_CNI. Non-zero for an unknown
+# `pltf_distro lite CNI` reads PLTF_DISTRO_LITE_CNI. Non-zero for an unknown
 # distro or an unset key, so it doubles as a distro-name validator.
 pltf_distro() { # distro key
   case " $PLTF_DISTROS " in *" $1 "*) ;; *) return 1 ;; esac
@@ -52,6 +52,19 @@ pltf_distro_clusters() { # distro
   printf '%s\n' $_dcl
 }
 pltf_distro_names() { printf '%s' "$PLTF_DISTROS" | tr ' ' '|'; }
+pltf_distro_known() { case " $PLTF_DISTROS " in *" $1 "*) return 0 ;; esac; return 1; }
+
+# k3d (clusters) or compose (one Docker Compose stack). Unset means k3d.
+pltf_distro_kind() { # distro
+  pltf_distro "$1" KIND || printf 'k3d\n'
+}
+
+# A Compose distro's project name: PLTF_<DISTRO>_PROJECT.
+pltf_distro_project() { # distro
+  eval "_dp=\${PLTF_$(pltf_upper "$1")_PROJECT:-}"
+  [ -n "$_dp" ] || return 1
+  printf '%s\n' "$_dp"
+}
 
 # Which distro a cluster belongs to.
 pltf_cluster_distro() { # name
@@ -72,26 +85,32 @@ pltf_distro_head() { # name
   pltf_distro "$(pltf_cluster_distro "$1")" CLUSTERS | cut -d' ' -f1
 }
 
-# The distro currently running, from whichever pltfctl cluster exists.
+# The distro currently running: whichever pltfctl cluster exists, else
+# whichever Compose distro has containers.
 pltf_running_distro() {
   for _rd in $(pltf_existing_clusters); do pltf_cluster_distro "$_rd"; return 0; done
+  for _rd in $PLTF_DISTROS; do
+    [ "$(pltf_distro_kind "$_rd")" = compose ] || continue
+    pltf_compose_present "$_rd" && { printf '%s\n' "$_rd"; return 0; }
+  done
   return 1
 }
 
 # ----- Clusters -------------------------------------------------------------
 
-# Existing pltfctl clusters, in teardown-safe order.
-pltf_existing_clusters() {
+# Existing pltfctl clusters, in teardown-safe order. Pass the names to look
+# for; the default is every current distro's (PLTF_ALL_CLUSTERS).
+pltf_existing_clusters() { # [names]
   _ec_list=$(k3d cluster list --output json 2>/dev/null) || _ec_list=''
-  for _name in $PLTF_ALL_CLUSTERS; do
+  for _name in ${1:-$PLTF_ALL_CLUSTERS}; do
     if printf '%s' "$_ec_list" | grep -q "\"name\"[[:space:]]*:[[:space:]]*\"$_name\""; then
       printf '%s\n' "$_name"
     fi
   done
 }
 
-# Look up one per-cluster value from infra/fleet.env: `pltf_fleet dev
-# HTTP_PORT` reads PLTF_DEV_HTTP_PORT. Non-zero for an unknown cluster or an
+# Look up one per-cluster value from infra/fleet.env: `pltf_fleet lite
+# HTTP_PORT` reads PLTF_LITE_HTTP_PORT. Non-zero for an unknown cluster or an
 # unset/empty key, so callers can use it as a cluster-name validator too.
 pltf_fleet() { # name key
   case " $PLTF_ALL_CLUSTERS " in *" $1 "*) ;; *) return 1 ;; esac

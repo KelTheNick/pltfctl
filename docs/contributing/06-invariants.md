@@ -5,8 +5,8 @@
   Cilium ClusterMesh requires it.
 - **The order that puts each distro's first cluster last to be deleted.** The first cluster owns
   the registry and the CA, so `up` creates it first and `down` deletes it after its peers
-  (`PLTF_ALL_CLUSTERS='op-3 op-2 op-1 dev lite'` in `infra/fleet.env`).
-- **Cilium and Hubble are installed by cilium-cli, not Flux**, on the Cilium distros (`dev`,
+  (`PLTF_ALL_CLUSTERS='op-3 op-2 op-1 lite'` in `infra/fleet.env`).
+- **Cilium and Hubble are installed by cilium-cli, not Flux**, on the Cilium distros (`lite`,
   `fleet`). Hubble's relay and UI are opt-in (`PLTF_ENABLE=hubble`). The CNI has to exist before Flux's controllers can schedule. Never turn them into a
   Flux HelmRelease.
 - **Any `cilium install --set` value** in `scripts/lib/pltfctl/cilium.sh`. `up` skips what
@@ -20,7 +20,7 @@
   `ServiceExport.spec.exportedAnnotations`, never on the Service itself. The derived Service
   that MCS-API generates does not inherit Service-level annotations, so setting it in both
   places opens a second, conflicting sync path. That path merges both clusters' pod IPs under
-  one hostname. Copy the pattern in `deploy/k3d-dev/kube-public/podinfo-export.yaml`.
+  one hostname. Copy the pattern in `deploy/k3d-lite/kube-public/podinfo-export.yaml`.
 - **Sample workloads stay StatefulSets.** Per-pod `clusterset.local` records come from a
   `hostname` field on the EndpointSlice, and only pods with stable names get one.
 - **The `pltf_wait_mesh_mirrors` calls in `pltf_up_mesh`** (`scripts/lib/pltfctl/cmds.sh`).

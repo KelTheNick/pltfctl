@@ -10,7 +10,7 @@ scripts/
 └── lib/
     ├── core/log.sh       # logging + pltf_require_cmd, shared by both entrypoints
     ├── pltfctl/*.sh      # common, flux, cilium, cmds, status, sbom, images,
-    │                     #   verify_local, kafka
+    │                     #   verify_local, kafka, topic, compose
     └── projctl/*.sh      # qa, scaffold, housekeeping
 ```
 
@@ -35,8 +35,9 @@ Helpers go in `scripts/lib/<entrypoint>/`. Code used by more than one entrypoint
 - **pltfctl:** write `cmd_<name>()` in `scripts/lib/pltfctl/cmds.sh`. Then add it to the `case`
   in `main()` and to the `usage()` text in `scripts/pltfctl`. A command group with its own verbs
   (such as `event-bus up|down|status`) gets its own lib instead, for example
-  `scripts/lib/pltfctl/kafka.sh`, sourced from `scripts/pltfctl`. So does a command large enough
-  to carry its own helpers, like `status` in `scripts/lib/pltfctl/status.sh`.
+  `scripts/lib/pltfctl/kafka.sh` (and `event-topic` in `topic.sh`), sourced from `scripts/pltfctl`. So does a command large enough
+  to carry its own helpers, like `status` in `scripts/lib/pltfctl/status.sh`. The Compose
+  distros' `up`, `status`, `verify` and `down` live in `scripts/lib/pltfctl/compose.sh`.
 - **A new platform component** (a workload `up` installs) gets a name in `PLTF_COMPONENTS` and a
   pod pattern in `pltf_component_pods`, both in `scripts/lib/pltfctl/status.sh`. That also gives
   it `pltfctl <component> status`. Otherwise `status` never shows it.

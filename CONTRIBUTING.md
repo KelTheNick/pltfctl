@@ -29,4 +29,5 @@ The short version:
 - For anything that touches the mesh: `./scripts/pltfctl up fleet && ./scripts/pltfctl verify`.
   `fleet` has not yet been run end to end on a live machine, so a first pass there is still a test
   of pltfctl itself, not only of your change.
-- Before running `down`, check what is running: it removes every pltfctl cluster.
+- Before running `down`, check what is running: it removes every pltfctl cluster and the `dev`
+  stack, then runs a host-wide `docker system prune -f` and `docker volume prune -f`.

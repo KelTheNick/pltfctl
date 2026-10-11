@@ -2,8 +2,11 @@
 
 `infra/fleet.env` is the single source of truth for everything this project creates:
 
-- the distros (`PLTF_DISTROS`, and per distro `PLTF_DISTRO_<D>_{CLUSTERS,CNI,REGISTRY,O11Y}`)
-- the cluster names, in teardown order (`PLTF_ALL_CLUSTERS`)
+- the distros (`PLTF_DISTROS`, `PLTF_DEFAULT_DISTRO`, and per distro
+  `PLTF_DISTRO_<D>_{KIND,CLUSTERS,CNI,REGISTRY,O11Y}`; `KIND` is `k3d` unless set to `compose`)
+- the cluster names, in teardown order (`PLTF_ALL_CLUSTERS`), plus `PLTF_LEGACY_CLUSTERS`: old
+  names `down` still deletes and `up` refuses to run alongside (today `dev`, the old k3d name)
+- for a Compose distro: its project name and host ports (`PLTF_DEV_PROJECT`, `PLTF_DEV_*_PORT`)
 - per cluster: Cilium cluster ID, API/HTTP/HTTPS host ports, pod/service CIDRs, cluster DNS IP,
   and route host prefix
 - the shared Docker network
@@ -25,7 +28,12 @@ with `envsubst` from `fleet.env`, and the scripts read the same file through
 - The first cluster of each distro owns the registry (where `REGISTRY=true`) and, on Cilium
   distros, the Cilium CA. It is created first and deleted after its peers. `fleet`'s first cluster is `op-1`.
 
-`./scripts/projctl check` confirms, for every distro: each cluster has an `infra/k3d/` template,
+A Compose distro (`dev`) has no clusters: its stack is `infra/compose/<distro>.yaml`, which reads
+images from `.env.sbom` and ports from `fleet.env` through Compose's `${VAR}` interpolation
+(`scripts/lib/pltfctl/compose.sh`).
+
+`./scripts/projctl check` confirms, for every compose distro, that `infra/compose/<d>.yaml` exists
+and `PLTF_<D>_PROJECT` is set; and for every k3d distro: each cluster has an `infra/k3d/` template,
 ports, CIDRs and IDs are unique within the distro, `deploy/k3d-base/` exists, every other
 `deploy/` directory names a known cluster, and no symlink is broken.
 

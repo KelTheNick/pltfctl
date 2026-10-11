@@ -15,7 +15,7 @@ pltfctl builds a throwaway Kubernetes environment on one local workstation. Plai
 5. [Identity and access](05-iam.md): kubeconfig identities, ServiceAccounts, namespaces and where secrets live.
 6. [Storage](06-storage.md): placeholder.
 7. [Database](07-database.md): placeholder (CloudNativePG).
-8. [Event bus](08-event-bus.md): Strimzi Kafka as a toggle on lite and dev (`pltfctl event-bus`), and the 16GB-laptop memory budget.
+8. [Event bus](08-event-bus.md): Strimzi Kafka as a toggle on lite (`pltfctl event-bus`), and the 16GB-laptop memory budget.
 9. [Distributed cache](09-distributed-cache.md): placeholder (Redis or Dragonfly).
 
 ---

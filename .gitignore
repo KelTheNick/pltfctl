@@ -23,3 +23,6 @@ tmp/
 .claude/
 .superpowers/
 docs/superpowers/
+
+# event-topic grant: client private keys
+.kafka-creds/

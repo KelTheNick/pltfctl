@@ -1,6 +1,15 @@
-# The lite event bus: one combined controller+broker node on ephemeral
-# (emptyDir) storage. Data does not survive a pod restart; replication
-# factors are 1 because there is nothing to replicate to.
+# The lite event bus: 3 dual-role (controller + broker) nodes, KRaft, JBOD on
+# local-path.
+#
+# local-path (k3s's default StorageClass) creates each PV as a directory on
+# the node the pod first lands on, and pins the pod to that node from then on.
+# The two JBOD volumes per node are therefore two directories on one
+# Docker-backed disk: the layout is real JBOD, the disk separation is not.
+# Anti-affinity spreads the pool across the three agents (the server is
+# tainted), so losing one agent costs one node; quorum and min ISR 2 survive.
+#
+# Sized for a 16GB laptop (wiki/devsecops/08-event-bus.md#capacity): the heap
+# is half the container limit, leaving the rest for off-heap and page cache.
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaNodePool
 metadata:
@@ -9,16 +18,39 @@ metadata:
   labels:
     strimzi.io/cluster: strimzi
 spec:
-  replicas: 1
+  replicas: 3
   roles: [controller, broker]
   storage:
-    type: ephemeral
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        class: local-path
+        size: 5Gi
+        kraftMetadata: shared
+        deleteClaim: true
+      - id: 1
+        type: persistent-claim
+        class: local-path
+        size: 5Gi
+        deleteClaim: true
   resources:
     requests: { cpu: 250m, memory: 768Mi }
     limits: { memory: 768Mi }
   jvmOptions:
     -Xms: 384m
     -Xmx: 384m
+  template:
+    pod:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    strimzi.io/pool-name: kraft-broker
 ---
 apiVersion: kafka.strimzi.io/v1
 kind: Kafka
@@ -37,12 +69,21 @@ spec:
         port: 9093
         type: internal
         tls: true
+        # mTLS: a client is the CN of a certificate from the clients CA,
+        # issued by `pltfctl event-topic grant` (KafkaUser).
+        authentication:
+          type: tls
+    # ACLs from each KafkaUser. ANONYMOUS is the plain listener's every
+    # client: kept a super user so 9092 stays open in-cluster, as before.
+    authorization:
+      type: simple
+      superUsers: [ANONYMOUS]
     config:
-      offsets.topic.replication.factor: 1
-      transaction.state.log.replication.factor: 1
-      transaction.state.log.min.isr: 1
-      default.replication.factor: 1
-      min.insync.replicas: 1
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+      default.replication.factor: 3
+      min.insync.replicas: 2
   entityOperator:
     topicOperator:
       resources:

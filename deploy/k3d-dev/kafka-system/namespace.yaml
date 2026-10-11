@@ -1,6 +1,0 @@
-# The event bus: the Strimzi operator and the Kafka cluster it manages.
-# lite and dev only; fleet does not run a bus yet.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: kafka-system

@@ -1,1 +1,6 @@
-../../k3d-dev/kafka-system/namespace.yaml
+# The event bus: the Strimzi operator and the Kafka cluster it manages.
+# lite only; fleet does not run a bus yet (dev runs AutoMQ in Compose).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kafka-system

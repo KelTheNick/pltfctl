@@ -354,6 +354,10 @@ pltf_status_summary() { # dir
 # Prints; always exits 0 for the full report (gate on `verify`). One
 # component (`pltfctl <component> status`) exits 1 when it is unhealthy.
 cmd_status() { # [component]
+  if _st_d=$(pltf_running_distro) && [ "$(pltf_distro_kind "$_st_d")" = compose ]; then
+    pltf_info "status is not available in dev mode: it reports on k3d distros only, and '$_st_d' is a Compose stack."
+    return 0
+  fi
   pltf_require_cmd k3d
   pltf_require_cmd kubectl
   pltf_require_cmd docker

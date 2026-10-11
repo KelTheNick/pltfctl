@@ -223,8 +223,8 @@ bootstrap Service marked `service.cilium.io/global: "true"` would rely on —
 and a gRPC health check confirms the remote pod's health service reports
 its own cluster name as `SERVING`.
 
-The cross-cluster checks above need at least two running clusters. On `lite`
-or `dev`, `verify` instead runs single-cluster mode: one Job per protocol in
+The cross-cluster checks above need at least two running clusters. On `lite`,
+`verify` instead runs single-cluster mode: one Job per protocol in
 `default` hitting podinfo in `kube-public`. That proves the protocols inside one
 cluster, not anything about the mesh. Passing `verify` on the fleet proves the
 substrate; it does not prove a Kafka deployment on top of it, since

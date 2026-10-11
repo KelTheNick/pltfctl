@@ -14,11 +14,14 @@ they are never checked.
 
 There is no offline chart-render suite. Check behaviour against a running cluster:
 
-    ./scripts/pltfctl up && ./scripts/pltfctl status            # dev, the default distro
+    ./scripts/pltfctl up && ./scripts/pltfctl status            # lite, the default distro
     curl -fsS http://gateway.k3d.workbench.local.gd:8080/readyz
+    ./scripts/pltfctl up dev && ./scripts/pltfctl verify        # dev: Kafka round trip on AutoMQ
     ./scripts/pltfctl up fleet && ./scripts/pltfctl verify      # acceptance gate for mesh changes
-    ./scripts/pltfctl event-bus up && ./scripts/pltfctl event-bus status   # event-bus changes (lite, dev)
+    ./scripts/pltfctl event-bus up && ./scripts/pltfctl event-bus status   # event-bus changes (lite only)
 
+`pltfctl up dev`, the renamed `lite` distro and `down` (with its host-wide Docker prune) have
+not been run live either; the `dev` Compose stack was only run directly with `docker compose`.
 `fleet` has not yet been run end to end on a live machine. A `verify` pass on it is the first
 evidence that a mesh change works, so report the output rather than assuming it.
 

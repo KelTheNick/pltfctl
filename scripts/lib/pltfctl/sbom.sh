@@ -38,12 +38,10 @@ pltf_sbom_check() {
     "version: \"$KUBE_ARGUS_CHART_VERSION\"" 1 "kube-argus chart" || _sb_rc=1
   pltf_sbom_expect deploy/k3d-base/kube-system/kgateway.yaml \
     "version: \"$KGATEWAY_CHART_VERSION\"" 2 "kgateway chart" || _sb_rc=1
-  pltf_sbom_expect deploy/k3d-dev/kafka-system/strimzi-operator.yaml \
+  pltf_sbom_expect deploy/k3d-lite/kafka-system/strimzi-operator.yaml \
     "version: \"$STRIMZI_VERSION\"" 1 "strimzi chart" || _sb_rc=1
-  for _sb_f in k3d-lite/kafka-system k3d-dev/kafka-system; do
-    pltf_sbom_expect deploy/$_sb_f/kraft.yaml \
-      "version: $KAFKA_VERSION" 1 "$_sb_f Kafka version" || _sb_rc=1
-  done
+  pltf_sbom_expect deploy/k3d-lite/kafka-system/kraft.yaml \
+    "version: $KAFKA_VERSION" 1 "lite Kafka version" || _sb_rc=1
   pltf_sbom_expect deploy/k3d-base/kube-public/podinfo.yaml \
     "image: $PODINFO_IMAGE" 1 "podinfo image" || _sb_rc=1
   pltf_sbom_expect deploy/k3d-base/default/verify-http.yaml \

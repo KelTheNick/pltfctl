@@ -30,7 +30,7 @@ There is no HTTPS listener. The HTTPS host port is reserved in the k3d port maps
 
 | Cluster | Host LB HTTP | Host LB HTTPS (reserved, nothing listens) |
 |---|---|---|
-| `lite`, `dev`, `op-1` | 8080 | 8443 |
+| `lite`, `op-1` | 8080 | 8443 |
 | `op-2` | 9080 | 9443 |
 | `op-3` | 7080 | 7443 |
 
@@ -46,7 +46,7 @@ Route hostnames follow `[<prefix>-]<ui>.k3d.workbench.local.gd` (`PLTF_DOMAIN` i
 
 | Cluster | Prefix | Example |
 |---|---|---|
-| `lite`, `dev` | none | `argus.k3d.workbench.local.gd` |
+| `lite` | none | `argus.k3d.workbench.local.gd` |
 | `op-1`, `op-2`, `op-3` | `op-1`, `op-2`, `op-3` (the cluster name) | `op-2-argus.k3d.workbench.local.gd` |
 
 The prefix makes a URL name the cluster that serves it, even when the port was copied from another cluster's URL (`scripts/README.md`).
@@ -82,7 +82,7 @@ kgateway serves `/readyz` on its `health` port (9093), not on `grpc-xds` (9977).
 | Hubble | `[<prefix>-]hubble.k3d.workbench.local.gd` | `hubble-ui` Service, port 80 | Cilium distros, with `PLTF_ENABLE=hubble` |
 | podinfo | `[<prefix>-]podinfo.k3d.workbench.local.gd` | `podinfo` Service, port 9898 | all distros |
 
-Sources: `deploy/k3d-base/kube-system/kube-argus.yaml`, `deploy/k3d-dev/kube-system/hubble.yaml`, `scripts/lib/pltfctl/cmds.sh`.
+Sources: `deploy/k3d-base/kube-system/kube-argus.yaml`, `deploy/k3d-lite/kube-system/hubble.yaml`, `scripts/lib/pltfctl/cmds.sh`.
 
 Hubble's relay and UI are installed by cilium-cli as part of the Cilium release, and only when `PLTF_ENABLE` names `hubble` at install time. Flux owns only the route, which is always applied and has no backend while Hubble is off. On a running cluster, `cilium hubble enable --ui --context k3d-<cluster>` turns Hubble on without another `up`. `lite` has no `hubble.yaml` because it has no Cilium. `pltfctl open` lists the URLs without a cluster and launches one only when the cluster is running (`scripts/lib/pltfctl/cmds.sh`).
 

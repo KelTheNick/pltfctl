@@ -22,7 +22,7 @@ k3s generates the apiserver's serving certificate. kubectl reaches it through `k
 
 ## The Cilium CA
 
-`cilium-ca` is a Secret in `kube-system` holding `ca.crt` and `ca.key`. cilium-cli creates it when Cilium is installed on a distro's first cluster (`dev`, or `op-1` on `fleet`).
+`cilium-ca` is a Secret in `kube-system` holding `ca.crt` and `ca.key`. cilium-cli creates it when Cilium is installed on a distro's first cluster (`lite`, or `op-1` on `fleet`).
 
 **Rule: every meshed cluster must trust the same CA.** ClusterMesh mTLS between clusters only works if they share it. So before Cilium installs on `op-2` or `op-3`, `cilium_propagate_ca` copies the first cluster's `cilium-ca` to the joining cluster (`scripts/lib/pltfctl/cilium.sh`, `scripts/README.md`).
 
@@ -62,7 +62,7 @@ Every k3d template maps a host HTTPS port (8443, 9443 or 7443) to port 443 on th
 
 ## Plain-HTTP registry
 
-The local OCI registry speaks plain HTTP. The Flux `oci-registry` HelmRepository sets `insecure: true` so source-controller will pull from `oci://oci-registry:5000` without TLS. The manifest describes it as a throwaway workstation registry only (`deploy/k3d-dev/flux-system/registry.yaml`).
+The local OCI registry speaks plain HTTP. The Flux `oci-registry` HelmRepository sets `insecure: true` so source-controller will pull from `oci://oci-registry:5000` without TLS. The manifest describes it as a throwaway workstation registry only (`deploy/k3d-lite/flux-system/registry.yaml`).
 
 ## Gaps
 

@@ -17,8 +17,15 @@ Start at the [index](wiki/devsecops/00-index.md); each page links to the next.
 5. [Identity and access](wiki/devsecops/05-iam.md): kubeconfig identities, ServiceAccounts, namespaces and where secrets live.
 6. [Storage](wiki/devsecops/06-storage.md): placeholder.
 7. [Database](wiki/devsecops/07-database.md): placeholder (CloudNativePG).
-8. [Event bus](wiki/devsecops/08-event-bus.md): Strimzi Kafka as a toggle on lite and dev (`pltfctl event-bus`), topology, JBOD on local-path, and the 16GB-laptop memory budget.
+8. [Event bus](wiki/devsecops/08-event-bus.md): Strimzi Kafka as a toggle on lite (`pltfctl event-bus`), topology, JBOD on local-path, and the 16GB-laptop memory budget.
 9. [Distributed cache](wiki/devsecops/09-distributed-cache.md): placeholder (Redis or Dragonfly).
+
+## Developer reference
+
+The `dev` distro: AutoMQ (Kafka on S3) with RustFS as its S3 store, as a Docker Compose stack.
+Start at the [index](wiki/developer/00-index.md).
+
+1. [AutoMQ on RustFS](wiki/developer/01-automq-rustfs.md): services, endpoints, commands on `dev`, why RustFS over Apache Ozone, and what has been tested.
 
 ## Deep dives
 
@@ -28,8 +35,9 @@ Start at the [index](wiki/devsecops/00-index.md); each page links to the next.
 
 New technical write-ups go in `wiki/`, so the knowledge lives with the code.
 
-- **Pick a home.** A page about one DevSecOps concern goes in `wiki/devsecops/` under its
-  number. A deeper, single-topic write-up goes in `wiki/<topic>.md` and is listed under
+- **Pick a home.** A page about one DevSecOps concern of the `lite` and `fleet` distros
+  goes in `wiki/devsecops/` under its number. A page about the developer `dev` distro goes
+  in `wiki/developer/`. A deeper, single-topic write-up goes in `wiki/<topic>.md` and is listed under
   "Deep dives" above.
 - **Numbered sets:** keep the `NN-name.md` numbering and the footer on every page
   (`← Previous · [Index](00-index.md) · Next →`, relative links only), and add the page to

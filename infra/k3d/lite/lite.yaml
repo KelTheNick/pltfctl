@@ -1,14 +1,18 @@
 ---
-# distro: lite — one cluster, k3s-native networking.  Context: k3d-lite
+# distro: lite (default) — one cluster, Cilium networking.  Context: k3d-lite
 #
 # TEMPLATE: every PLTF_* placeholder is filled from infra/fleet.env by
 # envsubst at create time. fleet.env is authoritative for every value.
 #
 # Posture:
-#   - Flannel CNI + kube-proxy, both k3s defaults. No Cilium, no mesh.
-#   - No registry.
-#   - Traefik disabled: the Gateway (kgateway) is the only way in from the
-#     host network, on the LB port below.
+#   - Cilium CNI with kube-proxy replacement (eBPF); Flannel, kube-proxy and
+#     the k3s NetworkPolicy controller are all disabled. Nodes stay NotReady
+#     until `cilium install` runs.
+#   - Creates the shared OCI registry.
+#   - 1 server (tainted CriticalAddonsOnly) + 3 agents: workloads get three
+#     nodes to spread across. The control plane itself is NOT HA.
+#   - Gateway (kgateway) for host-network access; Traefik disabled.
+#   - Workload-observability stack: declared (O11Y=true), not implemented yet.
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
@@ -17,7 +21,7 @@ metadata:
 image: rancher/k3s:$K3D_TAG
 
 servers: 1
-agents: 0
+agents: 3
 
 network: $PLTF_NETWORK
 
@@ -36,19 +40,38 @@ ports:
     nodeFilters:
       - loadbalancer
 
+# Local OCI registry, created and removed with this cluster.
+# Host: localhost:<REGISTRY_HOST_PORT>  In-cluster: <REGISTRY_NAME>:<REGISTRY_PORT>
+# (k3d does NOT prefix the registry's own name with "k3d-").
+registries:
+  create:
+    name: $PLTF_REGISTRY_NAME
+    host: "0.0.0.0"
+    hostPort: "$PLTF_REGISTRY_HOST_PORT"
+
 # Static upstream resolver: the Docker bridge gateway k3s auto-detects runs
-# no DNS listener, so external chart pulls would fail. A host fact, not a
-# CNI one — needed here too. See infra/network/resolv.conf.
+# no DNS listener, so external chart pulls would fail. See
+# infra/network/resolv.conf.
 volumes:
   - volume: $PLTF_RESOLV_CONF:/etc/pltfctl/resolv.conf:ro
     nodeFilters:
       - server:*
+      - agent:*
 
 options:
   k3d:
     wait: true
   k3s:
     extraArgs:
+      - arg: --flannel-backend=none
+        nodeFilters:
+          - "server:*"
+      - arg: --disable-network-policy
+        nodeFilters:
+          - "server:*"
+      - arg: --disable-kube-proxy
+        nodeFilters:
+          - "server:*"
       - arg: --disable=traefik
         nodeFilters:
           - "server:*"
@@ -62,6 +85,12 @@ options:
         nodeFilters:
           - "server:*"
       - arg: --resolv-conf=/etc/pltfctl/resolv.conf
+        nodeFilters:
+          - "server:*"
+          - "agent:*"
+      # Server runs the control plane + system add-ons only; workloads spread
+      # across the three agents (a 3-node workload quorum).
+      - arg: --node-taint=CriticalAddonsOnly=true:NoSchedule
         nodeFilters:
           - "server:*"
   kubeconfig:

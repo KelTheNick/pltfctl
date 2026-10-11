@@ -1,1 +1,28 @@
-../../k3d-dev/kafka-system/strimzi-operator.yaml
+# Strimzi cluster operator. Source (HelmRepository `strimzi`) lives in
+# repositories.yaml.
+#
+# Watches only its own namespace (the chart default). A bus in another
+# namespace needs that namespace added to watchNamespaces.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: strimzi-operator
+  namespace: kafka-system
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: strimzi-kafka-operator
+      version: "1.2.0"
+      sourceRef:
+        kind: HelmRepository
+        name: strimzi
+        namespace: flux-system
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+  values:
+    fullnameOverride: strimzi-cluster-operator

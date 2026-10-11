@@ -81,8 +81,14 @@ _cilium_override=${CILIUM_VERSION:-}
 # shellcheck source=lib/pltfctl/verify_local.sh
 . "$PLTFCTL_HOME/scripts/lib/pltfctl/verify_local.sh"
 # shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/compose.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/compose.sh"
+# shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/pltfctl/kafka.sh
 . "$PLTFCTL_HOME/scripts/lib/pltfctl/kafka.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/topic.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/topic.sh"
 
 # k3s image tag, from .env.sbom; override via K3D_TAG (must exist for your
 # arch). Floor >= v1.34.1-k3s1 (CoreDNS 1.12.3): MCS-API's `multicluster`
@@ -101,8 +107,11 @@ export PLTF_RESOLV_CONF
 usage() {
   cat <<'USAGE'
 Usage:
-  pltfctl up [lite|dev|fleet]   Stand a distro up. Default: dev.
-  pltfctl down                  Delete every pltfctl cluster (+ the registry).
+  pltfctl up [lite|dev|fleet]   Stand a distro up. Default: lite.
+  pltfctl down                  Delete every pltfctl k3d cluster (+ the
+                                registry) and Compose stack (+ its volumes),
+                                then `docker system prune -f` and `docker
+                                volume prune -f` — HOST-WIDE, not just pltfctl.
   pltfctl status                Every component's health, then their total
                                 CPU, memory and disk.
   pltfctl <component> status    One component: nodes cni mesh core flux gateway
@@ -113,19 +122,36 @@ Usage:
                                 same protocols across the ClusterMesh. Both: HTTP
                                 from this host through the gateway (curl).
   pltfctl doctor                Verify required tools are on PATH + SBOM drift.
-  pltfctl event-bus up [kraft]  Add the event bus to the running distro (lite,
-                                dev). Default: kraft (Strimzi Kafka, KRaft).
+  pltfctl event-bus up [kraft]  Add the event bus to the running lite distro.
+                                Default: kraft (Strimzi Kafka, KRaft).
   pltfctl event-bus down        Remove the event bus and its data.
   pltfctl event-bus status      Operator, Kafka, and
                                 each pod's state (live, starting,
                                 CrashLoopBackOff...) and usage. Exit 0 when Ready.
+  pltfctl event-topic create <topic> [--partitions N] [--replicas N]
+  pltfctl event-topic delete <topic>
+  pltfctl event-topic list      Topics and users on the event bus.
+  pltfctl event-topic grant <user> <topic>[,<topic>...]
+          [--access read|write|all] [--group G] [--produce B/s]
+          [--consume B/s] [--request-pct N] [--csr FILE] [--out DIR]
+                                A client identity: mTLS certificate, ACLs on
+                                the topics, quotas. Writes ca.crt, user.crt,
+                                user.key, client.properties to
+                                .kafka-creds/<cluster>/<user>/. --csr signs the
+                                client's own CSR (subject CN=<user>) instead.
+  pltfctl event-topic revoke <user>
+  pltfctl event-topic creds <user>
+                                Print the cluster CA cert, client cert and
+                                client key (PEM) to stdout.
 
 Distros (one at a time; values in infra/fleet.env):
-  lite   k3d-lite           flannel + kube-proxy, no registry.
+  lite   k3d-lite           Default. 1 server + 3 agents, Cilium (no
+                            kube-proxy), registry, workload o11y stack
+                            (planned).
                             http://<ui>.k3d.workbench.local.gd:8080
-  dev    k3d-dev            Cilium (no kube-proxy), registry,
-                            workload o11y stack (planned).
-                            http://<ui>.k3d.workbench.local.gd:8080
+  dev    Docker Compose     AutoMQ (Kafka on S3) over RustFS; no Kubernetes.
+                            infra/compose/dev.yaml. Kafka localhost:9094,
+                            S3 http://localhost:9000, console :9001.
   fleet  k3d-op-1, -2, -3   Cilium ClusterMesh across three clusters, registry,
                             no o11y stack. Hosts are prefixed per cluster:
                             http://op-1-<ui>…:8080  op-2-<ui>…:9080  op-3-<ui>…:7080
@@ -133,17 +159,20 @@ Distros (one at a time; values in infra/fleet.env):
   `fleet` is for something that must keep working after a whole cluster is
   lost: anything deciding by majority vote needs three failure domains.
 
-Every distro runs Flux; in kube-system kgateway + the Gateway (/readyz
+Every k3d distro runs Flux; in kube-system kgateway + the Gateway (/readyz
 route) and the kube-argus dashboard; in kube-public one podinfo pod (HTTP
-9898, TLS 9899, gRPC 9999) behind the podinfo smoke route. dev and fleet
+9898, TLS 9899, gRPC 9999) behind the podinfo smoke route. lite and fleet
 export podinfo across the mesh and add the local OCI registry:
   push from host: oci://localhost:5001   in-cluster: oci-registry:5000
+On dev, `verify` runs a Kafka produce/consume round trip and `open` lists its
+endpoints; `status` and `<component> status` only print that they are not
+available in dev mode (k3d distros only).
 
 Environment:
   PLTFCTL_HOME     Root of the pltfctl checkout (auto-detected if unset).
   PLTF_ENABLE      Opt-in extras for `up`, space-separated (default: none):
-                     hubble        Cilium's Hubble relay + UI (dev, fleet)
-                   e.g. PLTF_ENABLE=hubble pltfctl up dev
+                     hubble        Cilium's Hubble relay + UI (lite, fleet)
+                   e.g. PLTF_ENABLE=hubble pltfctl up lite
   K3D_TAG          k3s image tag (default: from .env.sbom).
   CILIUM_VERSION   Cilium version (default: from .env.sbom).
   PLTF_RESOLV_CONF Upstream resolver file mounted into every node, in
@@ -175,7 +204,7 @@ main() {
         case "$1" in
           -h | --help) usage; exit 0 ;;
           *)
-            pltf_distro "$1" CLUSTERS >/dev/null ||
+            pltf_distro_known "$1" ||
               pltf_die "Unknown distro: $1 (expected: $(pltf_distro_names))"
             distro=$1; shift ;;
         esac
@@ -218,6 +247,20 @@ main() {
         status) require_no_args "$@"; cmd_event_bus_status ;;
         -h | --help) usage ;;
         *) pltf_die "Usage: pltfctl event-bus up [$(pltf_event_bus_names)] | down | status" ;;
+      esac
+      ;;
+    event-topic)
+      action=${1:-}
+      [ "$#" -eq 0 ] || shift
+      case "$action" in
+        create) cmd_topic_create "$@" ;;
+        delete) cmd_topic_delete "$@" ;;
+        list) require_no_args "$@"; cmd_topic_list ;;
+        grant) cmd_topic_grant "$@" ;;
+        revoke) cmd_topic_revoke "$@" ;;
+        creds) cmd_topic_creds "$@" ;;
+        -h | --help) usage ;;
+        *) pltf_die "Usage: pltfctl event-topic create | delete | list | grant | revoke | creds" ;;
       esac
       ;;
     -h | --help | help) usage ;;

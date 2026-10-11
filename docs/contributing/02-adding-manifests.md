@@ -12,22 +12,22 @@ namespace, in this order:
 
 ## Shared vs per-context
 
-Anything every distro should get goes in `deploy/k3d-base/`: the Flux sources, the
+This applies to the k3d distros, `lite` and `fleet`. The `dev` distro has no Kubernetes and no
+`deploy/` directory: it is `infra/compose/dev.yaml`.
+
+Anything every k3d distro should get goes in `deploy/k3d-base/`: the Flux sources, the
 kgateway and kube-argus HelmReleases, the shared Gateway, and the `podinfo` sample
 (StatefulSet, Service and smoke route). The per-context directories hold only what differs:
 
-- `deploy/k3d-dev/` holds the real files for what only dev has: the Hubble route, the OCI
-  registry source, the podinfo ServiceExport (MCS-API, so it needs Cilium), and the event
-  bus in `kafka-system`.
-- `deploy/k3d-lite/` holds lite's single-node event bus; its operator and namespace files link to
-  dev's. fleet does not link `kafka-system`, so it has no bus.
+- `deploy/k3d-lite/` holds the real files: the Hubble route, the OCI registry source, the
+  podinfo ServiceExport (MCS-API, so it needs Cilium), and the event bus in `kafka-system`.
 - `kafka-system` is a toggle, not part of `up`: `flux_apply_tree` skips it, and
   `pltfctl event-bus up [bus]` applies `namespace.yaml`, `strimzi-operator.yaml` and `<bus>.yaml`
   (`scripts/lib/pltfctl/kafka.sh`). A new bus kind is a new `<bus>.yaml` plus its name in
   `PLTF_EVENT_BUSES` (`infra/fleet.env`).
-- `deploy/k3d-op-1/` symlinks each namespace directory to dev's.
+- `deploy/k3d-op-1/` symlinks `flux-system`, `kube-public` and `kube-system` to lite's. It does not
+  link `kafka-system`, so `fleet` has no bus.
 - `deploy/k3d-op-2/` and `deploy/k3d-op-3/` symlink each namespace directory to `deploy/k3d-op-1/`.
-- `lite` has no directory of its own. It gets `k3d-base` and nothing else.
 
 Editing a linked namespace therefore changes every context that links it, which is what you want
 for the platform. Links are per namespace directory, so a **new** file in a linked namespace

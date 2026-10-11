@@ -1,9 +1,9 @@
 # scripts/
 
 This directory holds the two entrypoints, `pltfctl` and `projctl`. `pltfctl`
-sources nine function-only libraries from `scripts/lib/pltfctl/` (`common.sh`,
+sources eleven function-only libraries from `scripts/lib/pltfctl/` (`common.sh`,
 `flux.sh`, `cilium.sh`, `cmds.sh`, `status.sh`, `sbom.sh`, `images.sh`,
-`verify_local.sh`, `kafka.sh`) after `scripts/lib/core/log.sh`; `projctl` sources
+`verify_local.sh`, `kafka.sh`, `topic.sh`, `compose.sh`) after `scripts/lib/core/log.sh`; `projctl` sources
 `scripts/lib/projctl/`. The comments inside those files state
 constraints — one flag, one wait, one retry shape — without the reasoning
 behind them. This file is that reasoning: the symptom that shows up when the
@@ -374,7 +374,7 @@ Each column has one source, taken once per cluster per run
 | DISK | the same summary API, `ephemeral-storage` | logs, writable layer, emptyDir. |
 | PVC `use` | `du` over `/var/lib/rancher/k3s/storage/pvc-*` inside each node container | The summary API does not measure local-path's hostPath volumes, so it is measured on disk. `-` until `du` finds the directory. |
 | PVC `size` | the PVC's capacity, else its request | local-path does not enforce it: a volume can outgrow its size. |
-| `nodes` | `docker stats` and `du -sx /var/lib/rancher/k3s` per node container | What the Docker VM actually pays: k3s itself, containerd, the image store, and on `lite` flannel and kube-proxy, which run inside k3s and have no pods. |
+| `nodes` | `docker stats` and `du -sx /var/lib/rancher/k3s` per node container | What the Docker VM actually pays: k3s itself, containerd, the image store, and, on a flannel cluster (no distro uses one today), flannel and kube-proxy, which run inside k3s and have no pods. |
 
 `pltfctl status` prints no tables, only each component's health and a total:
 `components` (the sum of every table) and `nodes`. The per-pod rows come from

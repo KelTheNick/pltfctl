@@ -23,7 +23,8 @@ older layout.
   you actually ran. `fleet` has not been run end to end on a live machine yet; say so rather
   than claiming its `verify` passes.
 - **Never run `down` (or delete clusters) without first checking what is running and getting
-  the user's go-ahead.** `down` removes every pltfctl cluster, not just the one you created.
+  the user's go-ahead.** `down` removes every pltfctl cluster and Compose stack, not just the
+  one you created, then runs a host-wide `docker system prune -f` and `docker volume prune -f`.
 - **Write new technical knowledge into the wiki**, following "Writing for the wiki" in
   [WIKI.md](WIKI.md). Keep docs you touch in step with the code you change.
 - `docs/superpowers/` is agent scratch and is gitignored.
