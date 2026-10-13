@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # pltfctl shared logic. Sourced by scripts/pltfctl (which sets PLTFCTL_HOME
-# and sources scripts/lib/core/log.sh + infra/fleet.env first).
+# and sources scripts/lib/core/log.sh + infra/k3d/fleet.env first).
 # Defines functions plus a few derived constants — no work at source time.
 
 [ -n "${PLTFCTL_HOME:-}" ] && [ -d "$PLTFCTL_HOME/scripts/lib" ] || {
@@ -11,7 +11,7 @@
 
 # ----- Layout & inventory --------------------------------------------------
 # Inventory VALUES (cluster names, ports, CIDRs, IDs, network, registry) live
-# in infra/fleet.env; this section only reads them.
+# in infra/k3d/fleet.env; this section only reads them.
 
 # shellcheck disable=SC2034 # consumed by scripts/lib/pltfctl/cmds.sh (cmd_up)
 PLTF_K3D_DIR="$PLTFCTL_HOME/infra/k3d"
@@ -26,7 +26,8 @@ pltf_enabled() { case " $PLTF_ENABLE " in *" $1 "*) return 0 ;; esac; return 1; 
 
 # ----- Distros --------------------------------------------------------------
 # A distro is a fixed posture: which clusters, which CNI, registry or not,
-# o11y or not. All of it is declared in infra/fleet.env (PLTF_DISTRO_*).
+# o11y or not. The list and each kind are in infra/.infra.env; a k3d
+# distro's clusters, CNI, registry and o11y in infra/k3d/fleet.env (PLTF_DISTRO_*).
 #
 # Why `fleet` has three clusters: three is the first count you can LOSE one
 # of. Software that decides by majority vote needs 2 of 3 to agree; with two
@@ -109,7 +110,7 @@ pltf_existing_clusters() { # [names]
   done
 }
 
-# Look up one per-cluster value from infra/fleet.env: `pltf_fleet lite
+# Look up one per-cluster value from infra/k3d/fleet.env: `pltf_fleet lite
 # HTTP_PORT` reads PLTF_LITE_HTTP_PORT. Non-zero for an unknown cluster or an
 # unset/empty key, so callers can use it as a cluster-name validator too.
 pltf_fleet() { # name key
@@ -173,14 +174,14 @@ pltf_apply_cluster_info() { # name
 }
 
 # Render a k3d config template with envsubst. Exports this cluster's
-# infra/fleet.env values under the generic PLTF_CLUSTER_* names the templates
+# infra/k3d/fleet.env values under the generic PLTF_CLUSTER_* names the templates
 # use, plus the fleet-wide ones, so all three templates stay structurally
 # identical. Runs in a subshell so the exports do not leak between clusters.
 pltf_render_k3d_config() { # name file
   pltf_require_cmd envsubst
   (
     for _rk in API_PORT HTTP_PORT HTTPS_PORT POD_CIDR SVC_CIDR DNS_IP; do
-      _rv=$(pltf_fleet "$1" "$_rk") || pltf_die "infra/fleet.env has no $_rk for cluster: $1"
+      _rv=$(pltf_fleet "$1" "$_rk") || pltf_die "infra/k3d/fleet.env has no $_rk for cluster: $1"
       export "PLTF_CLUSTER_$_rk=$_rv"
     done
     export PLTF_NETWORK PLTF_API_HOST PLTF_REGISTRY_NAME PLTF_REGISTRY_HOST_PORT

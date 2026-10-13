@@ -10,7 +10,7 @@
 
 # UI name -> path. The hostname is pltf_ui_host ([<prefix>-]<ui>.<domain>) and every
 # pltfctl code path takes the port from pltf_lb_http_port, so no two of them can
-# disagree. That helper reads infra/fleet.env, the same file the k3d configs
+# disagree. That helper reads infra/k3d/fleet.env, the same file the k3d configs
 # are rendered from, so the two cannot drift.
 pltf_ui_path() { # ui
   case "$1" in
@@ -574,8 +574,9 @@ cmd_open() { # [ui|cluster] [cluster]
   # A Compose distro serves no routed UIs; its endpoints are host ports.
   if [ "$(pltf_distro_kind "$_op_distro")" = compose ]; then
     [ "$#" -eq 0 ] || pltf_die "The $_op_distro distro has no routed UIs; run 'pltfctl open' for its endpoints"
+    _op_v=$(pltf_compose_running_variant "$_op_distro") || _op_v=$(pltf_compose_variant "$_op_distro")
     pltf_info "Endpoints of the $_op_distro distro (Compose)"
-    pltf_compose_endpoints
+    pltf_compose_endpoints "$_op_distro" "$_op_v"
     return 0
   fi
   _op_cluster=$(pltf_distro_clusters "$_op_distro" | head -n 1)

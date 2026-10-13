@@ -42,16 +42,26 @@ _cilium_override=${CILIUM_VERSION:-}
 . "$PLTFCTL_HOME/.env.sbom"
 [ -z "$_cilium_override" ] || CILIUM_VERSION=$_cilium_override
 
-# Fleet inventory: cluster names, ports, CIDRs, IDs, network, registry. The
-# source of truth for everything this project creates. See infra/fleet.env
-[ -f "$PLTFCTL_HOME/infra/fleet.env" ] || {
-  printf '[err ] infra/fleet.env not found at %s — it defines the fleet\n' \
-    "$PLTFCTL_HOME/infra/fleet.env" >&2
-  exit 1
-}
+# Inventory, the source of truth for everything this project creates, in
+# three files: what every distro shares (the distro list, each one's kind),
+# then the k3d clusters (names, ports, CIDRs, IDs, network, registry), then
+# the Compose stack (project, ports). Each is required.
+for _inv in infra/.infra.env infra/k3d/fleet.env infra/compose/compose.env; do
+  [ -f "$PLTFCTL_HOME/$_inv" ] || {
+    printf '[err ] %s not found at %s — it is part of the inventory\n' \
+      "$_inv" "$PLTFCTL_HOME/$_inv" >&2
+    exit 1
+  }
+done
 # shellcheck source-path=SCRIPTDIR
-# shellcheck source=../infra/fleet.env
-. "$PLTFCTL_HOME/infra/fleet.env"
+# shellcheck source=../infra/.infra.env
+. "$PLTFCTL_HOME/infra/.infra.env"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../infra/k3d/fleet.env
+. "$PLTFCTL_HOME/infra/k3d/fleet.env"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../infra/compose/compose.env
+. "$PLTFCTL_HOME/infra/compose/compose.env"
 
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/core/log.sh
@@ -101,7 +111,7 @@ export K3D_TAG
 # on an air-gapped host. See scripts/README.md#dns-and-pltf_resolv_conf
 # pltf_render_k3d_config's plain `envsubst` cannot expand `${VAR:-default}`
 # inside the YAML, so the default is resolved here, once, and exported.
-PLTF_RESOLV_CONF=${PLTF_RESOLV_CONF:-$PLTFCTL_HOME/infra/network/resolv.conf}
+PLTF_RESOLV_CONF=${PLTF_RESOLV_CONF:-$PLTFCTL_HOME/infra/k3d/network/resolv.conf}
 export PLTF_RESOLV_CONF
 
 usage() {
@@ -144,14 +154,18 @@ Usage:
                                 Print the cluster CA cert, client cert and
                                 client key (PEM) to stdout.
 
-Distros (one at a time; values in infra/fleet.env):
+Distros (one at a time; infra/.infra.env, infra/k3d/fleet.env, infra/compose/):
   lite   k3d-lite           Default. 1 server + 3 agents, Cilium (no
                             kube-proxy), registry, workload o11y stack
                             (planned).
                             http://<ui>.k3d.workbench.local.gd:8080
-  dev    Docker Compose     AutoMQ (Kafka on S3) over RustFS; no Kubernetes.
-                            infra/compose/dev.yaml. Kafka localhost:9094,
-                            S3 http://localhost:9000, console :9001.
+  dev    Docker Compose     One Kafka, no Kubernetes. Kafka localhost:9094.
+                            VARIANT_KAFKA (infra/compose/.variant.env, or
+                            exported) picks infra/compose/dev-<variant>.yaml:
+                              strimzi-kraft  Strimzi's Kafka, KRaft (default)
+                              aiven-tiered   Kafka + tiered storage on RustFS
+                              automq         AutoMQ, log in RustFS (S3)
+                            RustFS variants add S3 :9000, console :9001.
   fleet  k3d-op-1, -2, -3   Cilium ClusterMesh across three clusters, registry,
                             no o11y stack. Hosts are prefixed per cluster:
                             http://op-1-<ui>…:8080  op-2-<ui>…:9080  op-3-<ui>…:7080
@@ -176,7 +190,7 @@ Environment:
   K3D_TAG          k3s image tag (default: from .env.sbom).
   CILIUM_VERSION   Cilium version (default: from .env.sbom).
   PLTF_RESOLV_CONF Upstream resolver file mounted into every node, in
-                    resolv.conf format (default: infra/network/resolv.conf's public
+                    resolv.conf format (default: infra/k3d/network/resolv.conf's public
                     resolvers). Override to point at an internal/corporate
                     resolver behind a VPN or on an air-gapped host.
 USAGE

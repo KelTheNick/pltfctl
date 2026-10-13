@@ -4,22 +4,22 @@ This page covers what pltfctl creates on the host: the clusters, their nodes, th
 
 ## Distros
 
-A **distro** is a fixed posture: which clusters exist, which CNI (Container Network Interface, the pod networking plugin) they use, and whether they get a registry. All of it is declared in `infra/fleet.env` (`PLTF_DISTRO_*`).
+A **distro** is a fixed posture: which clusters exist, which CNI (Container Network Interface, the pod networking plugin) they use, and whether they get a registry. All of it is declared in `infra/k3d/fleet.env` (`PLTF_DISTRO_*`).
 
 | Distro | Clusters (contexts) | CNI | Registry | O11Y flag | Nodes per cluster |
 |---|---|---|---|---|---|
 | `lite` (default) | `lite` (`k3d-lite`) | Cilium | yes | true | 1 server, 3 agents |
 | `fleet` | `op-1`, `op-2`, `op-3` (`k3d-op-1`..`k3d-op-3`) | Cilium | yes, on `op-1` | false | 1 server, 0 agents |
 
-Sources: `infra/fleet.env`, `infra/k3d/lite/lite.yaml`, `infra/k3d/fleet/*.yaml`.
+Sources: `infra/k3d/fleet.env`, `infra/k3d/lite/lite.yaml`, `infra/k3d/fleet/*.yaml`.
 
 - **The third distro, `dev`, is not covered here.** It is a Docker Compose stack, not k3d; see the [developer reference](../developer/00-index.md).
 - **`lite` was called `dev`.** The k3d shape now named `lite` was the `dev` distro in earlier pltfctl versions. No distro uses flannel, though `fleet.env` still accepts it as a CNI value.
 - **Only one distro runs at a time.** Distros reuse the same host ports. `up` refuses to start a distro while a different one is running, because the second create would fail half-way with a port bind error. It also refuses while a k3d cluster named `dev` from an older pltfctl exists (`PLTF_LEGACY_CLUSTERS`); run `pltfctl down` first (`pltf_guard_one_distro` in `scripts/lib/pltfctl/cmds.sh`).
-- **What "fleet" means here.** In pltfctl, a fleet is one system spread across several clusters that are meshed together and act as failure domains for it. That differs from the common industry use, where a "fleet" is many independent clusters managed together. pltfctl's fleet clusters share one ClusterMesh, one registry (on `op-1`) and one Cilium CA (from `op-1`) (`infra/fleet.env`, `scripts/lib/pltfctl/cmds.sh`).
+- **What "fleet" means here.** In pltfctl, a fleet is one system spread across several clusters that are meshed together and act as failure domains for it. That differs from the common industry use, where a "fleet" is many independent clusters managed together. pltfctl's fleet clusters share one ClusterMesh, one registry (on `op-1`) and one Cilium CA (from `op-1`) (`infra/k3d/fleet.env`, `scripts/lib/pltfctl/cmds.sh`).
 - **Why three clusters in `fleet`.** Three is the first count where you can lose one. Software that decides by majority vote needs two of three to agree; with two places, one holds the majority and losing it stops everything. pltfctl supplies the failure domains and does not know which workload uses them (`scripts/lib/pltfctl/common.sh`).
 - **`fleet` has not been live-tested.** It has not yet been run end to end on a live machine (`docs/contributing/05-verifying.md`).
-- **`O11Y=true` on `lite` is declared only.** No workload-observability stack is wired yet. Hubble is separate: it comes with Cilium, and its relay and UI are opt-in (`PLTF_ENABLE=hubble`) on every Cilium distro (`infra/fleet.env`, `scripts/lib/pltfctl/common.sh`).
+- **`O11Y=true` on `lite` is declared only.** No workload-observability stack is wired yet. Hubble is separate: it comes with Cilium, and its relay and UI are opt-in (`PLTF_ENABLE=hubble`) on every Cilium distro (`infra/k3d/fleet.env`, `scripts/lib/pltfctl/common.sh`).
 
 ## Node shapes
 
@@ -31,7 +31,7 @@ Each node is a Docker container running k3s (a small Kubernetes distribution), c
 
 ## Docker network
 
-Every cluster joins one Docker network, `k3d-pltfctl` (`PLTF_NETWORK` in `infra/fleet.env`). ClusterMesh exposes `clustermesh-apiserver` as a NodePort, so every cluster's node IPs must be mutually routable. A shared bridge gives that. `down` removes the network at the end, because k3d can leave it behind and never cleans up a network it did not create (`scripts/lib/pltfctl/cmds.sh`).
+Every cluster joins one Docker network, `k3d-pltfctl` (`PLTF_NETWORK` in `infra/k3d/fleet.env`). ClusterMesh exposes `clustermesh-apiserver` as a NodePort, so every cluster's node IPs must be mutually routable. A shared bridge gives that. `down` removes the network at the end, because k3d can leave it behind and never cleans up a network it did not create (`scripts/lib/pltfctl/cmds.sh`).
 
 ## The registry as an artifact store
 
@@ -49,11 +49,11 @@ Every cluster joins one Docker network, `k3d-pltfctl` (`PLTF_NETWORK` in `infra/
 
 ## fleet.env is the source of truth
 
-`infra/fleet.env` holds every cluster name, port, CIDR, cluster ID, the network and the registry. The k3d configs under `infra/k3d/<distro>/` are templates: `up` renders them with `envsubst` from `fleet.env`, and the scripts read the same file through `pltf_fleet`. Change a value in `fleet.env`, never in a template or a script (`infra/fleet.env`, `scripts/lib/pltfctl/common.sh`, `docs/contributing/03-fleet.md`).
+`infra/k3d/fleet.env` holds every cluster name, port, CIDR, cluster ID, the network and the registry. The k3d configs under `infra/k3d/<distro>/` are templates: `up` renders them with `envsubst` from `fleet.env`, and the scripts read the same file through `pltf_fleet`. Change a value in `fleet.env`, never in a template or a script (`infra/k3d/fleet.env`, `scripts/lib/pltfctl/common.sh`, `docs/contributing/03-fleet.md`).
 
 ## Create-time-only settings
 
-Every value in `fleet.env` is applied when a cluster is created. Changing one needs `down` + `up`. k3d host port maps in particular can only be declared at create, which is why an HTTPS port is reserved even though nothing listens on it (`infra/fleet.env`, `infra/k3d/*/*.yaml`).
+Every value in `fleet.env` is applied when a cluster is created. Changing one needs `down` + `up`. k3d host port maps in particular can only be declared at create, which is why an HTTPS port is reserved even though nothing listens on it (`infra/k3d/fleet.env`, `infra/k3d/*/*.yaml`).
 
 ## Skip-idempotency of `up`
 
@@ -65,7 +65,7 @@ If a `cilium install` was interrupted, the DaemonSet can exist without a finishe
 
 ## Teardown order
 
-`PLTF_ALL_CLUSTERS='op-3 op-2 op-1 lite'` is the teardown-safe order. A first cluster owns the registry and the Cilium CA, so it is created first and deleted after its peers. `down` walks this list, then `PLTF_LEGACY_CLUSTERS='dev'` (the old k3d `dev` cluster), deleting only clusters that exist, and tolerates partial state (`infra/fleet.env`, `scripts/lib/pltfctl/cmds.sh`).
+`PLTF_ALL_CLUSTERS='op-3 op-2 op-1 lite'` is the teardown-safe order. A first cluster owns the registry and the Cilium CA, so it is created first and deleted after its peers. `down` walks this list, then `PLTF_LEGACY_CLUSTERS='dev'` (the old k3d `dev` cluster), deleting only clusters that exist, and tolerates partial state (`infra/k3d/fleet.env`, `scripts/lib/pltfctl/cmds.sh`).
 
 After the clusters, `down` deletes the registry, the developer `dev` distro's Compose stack with its volumes, and the shared network. It then runs `docker system prune -f` and `docker volume prune -f`. **That prune is host-wide, not scoped to pltfctl:** it removes every stopped container, unused network, dangling image and the build cache, and every unused anonymous volume on the machine (`cmd_down` in `scripts/lib/pltfctl/cmds.sh`). `down`, including the prune, has not been run live since this change.
 

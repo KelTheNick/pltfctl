@@ -26,7 +26,7 @@ Helpers go in `scripts/lib/<entrypoint>/`. Code used by more than one entrypoint
   executable.
 - POSIX sh only.
 - Never hardcode a fleet value (cluster name, port, CIDR, cluster ID, network, registry) in a
-  script. Read it from `infra/fleet.env` with `pltf_fleet <cluster> <KEY>`.
+  script. Read it from `infra/k3d/fleet.env` with `pltf_fleet <cluster> <KEY>`.
 - Never hardcode a version. Read it from `.env.sbom`.
 - Prefer returning a new copy over changing values in place, and keep functions small.
 

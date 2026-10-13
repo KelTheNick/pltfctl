@@ -15,7 +15,7 @@ Guides (start at the [index](docs/contributing/00-index.md); each guide links to
 
 1. [Script conventions](docs/contributing/01-conventions.md): POSIX sh rules and how to add a subcommand.
 2. [Adding a manifest](docs/contributing/02-adding-manifests.md): where it goes in `deploy/`, and scaffolding it with `projctl`.
-3. [Changing the fleet](docs/contributing/03-fleet.md): ports, CIDRs, clusters and the registry, all in `infra/fleet.env`.
+3. [Changing the fleet](docs/contributing/03-fleet.md): ports, CIDRs, clusters and the registry, all in `infra/k3d/fleet.env`.
 4. [Bumping a pinned version](docs/contributing/04-versions.md): `.env.sbom` and the drift check.
 5. [Verifying a change](docs/contributing/05-verifying.md): checks you can run offline and the live acceptance gate.
 6. [Things never to change casually](docs/contributing/06-invariants.md): read this before you touch Cilium, the mesh or `verify`.

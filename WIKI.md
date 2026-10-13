@@ -22,10 +22,18 @@ Start at the [index](wiki/devsecops/00-index.md); each page links to the next.
 
 ## Developer reference
 
-The `dev` distro: AutoMQ (Kafka on S3) with RustFS as its S3 store, as a Docker Compose stack.
+The `dev` distro: Kafka as a Docker Compose stack, in variants chosen by `VARIANT_KAFKA` (`infra/compose/.variant.env`): `strimzi-kraft` (default), `aiven-tiered` and `automq`.
 Start at the [index](wiki/developer/00-index.md).
 
-1. [AutoMQ on RustFS](wiki/developer/01-automq-rustfs.md): services, endpoints, commands on `dev`, why RustFS over Apache Ozone, and what has been tested.
+1. [Kafka variants](wiki/developer/01-variants.md): the three variants, endpoints, what `verify` checks on each, switching (`down` first) and how to add a variant.
+2. [aiven-tiered: Kafka tiered storage on RustFS](wiki/developer/02-aiven-tiered.md): services, how tiering works, the plugin and its pins, commands on `dev`, why RustFS over Apache Ozone, and what has been tested.
+3. [automq: shared-data Kafka on RustFS](wiki/developer/03-automq.md): services, buckets, the S3-only WAL and its latency.
+
+## Architect reference
+
+Start at the [index](wiki/architect/00-index.md). Design choices for production, each tied to the distro that demonstrates it.
+
+1. [Event bus: shared-data vs shared-nothing](wiki/architect/01-event-bus-storage.md): Kafka on local disks (Strimzi, `lite`) against Kafka on object storage (shared-data): production pros and cons, and how to choose. `dev` runs each model as a variant: `strimzi-kraft`, `aiven-tiered` (tiered storage) and `automq` (shared-data).
 
 ## Deep dives
 
@@ -36,8 +44,8 @@ Start at the [index](wiki/developer/00-index.md).
 New technical write-ups go in `wiki/`, so the knowledge lives with the code.
 
 - **Pick a home.** A page about one DevSecOps concern of the `lite` and `fleet` distros
-  goes in `wiki/devsecops/` under its number. A page about the developer `dev` distro goes
-  in `wiki/developer/`. A deeper, single-topic write-up goes in `wiki/<topic>.md` and is listed under
+  goes in `wiki/devsecops/` under its number. A page about the developer `dev` distro or one of
+  its Kafka variants goes in `wiki/developer/` (one page per variant, listed in `01-variants.md`). A production design trade-off goes in `wiki/architect/`. A deeper, single-topic write-up goes in `wiki/<topic>.md` and is listed under
   "Deep dives" above.
 - **Numbered sets:** keep the `NN-name.md` numbering and the footer on every page
   (`← Previous · [Index](00-index.md) · Next →`, relative links only), and add the page to

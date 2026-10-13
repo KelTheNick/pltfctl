@@ -1,5 +1,5 @@
 # The event bus: the Strimzi operator and the Kafka cluster it manages.
-# lite only; fleet does not run a bus yet (dev runs AutoMQ in Compose).
+# lite only; fleet does not run a bus yet (dev runs Kafka in Compose).
 apiVersion: v1
 kind: Namespace
 metadata:

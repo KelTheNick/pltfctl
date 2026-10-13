@@ -6,7 +6,7 @@
 # from oci-registry:5000 (inside a pod, `localhost` is the pod).
 #
 # Live-verified (Task 7): k3d names the registry container/network-alias
-# exactly as given to `registries.create.name` in infra/k3d/dev/dev.yaml (and fleet/op-1.yaml) — "oci-registry"
+# exactly as given to `registries.create.name` in infra/k3d/lite/lite.yaml (and fleet/op-1.yaml) — "oci-registry"
 # — with NO "k3d-" prefix (that prefix is only added to cluster nodes:
 # servers/agents/serverlb). CoreDNS's injected NodeHosts confirms this
 # (`oci-registry` → the registry's docker-network IP). The previous

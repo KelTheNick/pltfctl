@@ -5,7 +5,7 @@
 #
 # GatewayParameters forces the proxy Service to type LoadBalancer on port 80 so
 # k3d's klipper servicelb binds :80 on the nodes and the k3d serverlb publishes
-# each cluster's LB HTTP port to it (see infra/fleet.env).
+# each cluster's LB HTTP port to it (see infra/k3d/fleet.env).
 # HTTPS (:8443/:9443 → :443) is reserved in the k3d port maps only; add a 443
 # listener here when TLS lands — no cluster rebuild needed.
 apiVersion: gateway.kgateway.dev/v1alpha1

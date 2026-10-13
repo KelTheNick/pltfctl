@@ -1,8 +1,11 @@
-# distro: dev — AutoMQ (Kafka on S3) over RustFS, as a Docker Compose stack.
+# distro: dev, variant automq — AutoMQ (Kafka on S3) over RustFS: shared-data.
+# Selected by VARIANT_KAFKA=automq (infra/compose/.variant.env).
 #
 # Run by `pltfctl up dev` as `docker compose -p $PLTF_DEV_PROJECT -f <this>`.
+# The service is named `kafka` in every variant, so pltfctl's commands do not
+# care which one runs.
 # Every ${VAR} is Compose's own interpolation: images come from .env.sbom and
-# ports from infra/fleet.env, both exported by scripts/pltfctl. Run it by hand
+# ports from infra/k3d/fleet.env, both exported by scripts/pltfctl. Run it by hand
 # only through pltfctl, or those values are unset.
 #
 # Posture:
@@ -12,7 +15,7 @@
 #     restarts.
 #   - RustFS is the S3 store: one container, one named volume. Chosen over
 #     Apache Ozone, which needs a manager, a storage-container manager, an S3
-#     gateway and datanodes. See wiki/developer/01-automq-rustfs.md
+#     gateway and datanodes. See wiki/developer/02-aiven-tiered.md
 #   - Everything binds 127.0.0.1. Credentials are local throwaways; override
 #     them with PLTF_DEV_S3_ACCESS_KEY / PLTF_DEV_S3_SECRET_KEY.
 
@@ -55,9 +58,9 @@ services:
         mc mb --ignore-existing s3/automq-data s3/automq-ops
     restart: "no"
 
-  automq:
+  kafka:
     image: ${AUTOMQ_IMAGE:?set by scripts/pltfctl from .env.sbom}
-    hostname: automq
+    hostname: kafka
     depends_on:
       buckets:
         condition: service_completed_successfully
@@ -73,7 +76,7 @@ services:
       # would orphan it. Any base64 UUID works (kafka-storage.sh random-uuid).
       CLUSTER_ID: 3D4fXN-yS1-vsQ8aJ_q4Mg
     # Two client listeners: PLAINTEXT for containers on this network
-    # (automq:9092), EXTERNAL for the host (localhost:$PLTF_DEV_KAFKA_PORT).
+    # (kafka:9092), EXTERNAL for the host (localhost:$PLTF_DEV_KAFKA_PORT).
     # A broker hands clients the advertised address, so one listener cannot
     # serve both.
     command:
@@ -85,18 +88,18 @@ services:
         --override cluster.id=$$CLUSTER_ID \
         --override node.id=0 \
         --override process.roles=broker,controller \
-        --override controller.quorum.voters=0@automq:9093 \
-        --override controller.quorum.bootstrap.servers=automq:9093 \
+        --override controller.quorum.voters=0@kafka:9093 \
+        --override controller.quorum.bootstrap.servers=kafka:9093 \
         --override listeners=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094 \
         --override listener.security.protocol.map=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT \
-        --override advertised.listeners=PLAINTEXT://automq:9092,EXTERNAL://localhost:${PLTF_DEV_KAFKA_PORT:?} \
+        --override advertised.listeners=PLAINTEXT://kafka:9092,EXTERNAL://localhost:${PLTF_DEV_KAFKA_PORT:?} \
         --override s3.data.buckets='0@s3://automq-data?region=us-east-1&endpoint=http://rustfs:9000&pathStyle=true' \
         --override s3.ops.buckets='1@s3://automq-ops?region=us-east-1&endpoint=http://rustfs:9000&pathStyle=true' \
         --override s3.wal.path='0@s3://automq-data?region=us-east-1&endpoint=http://rustfs:9000&pathStyle=true'
     ports:
       - 127.0.0.1:${PLTF_DEV_KAFKA_PORT:?}:9094
     healthcheck:
-      test: ["CMD-SHELL", "/opt/automq/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server automq:9092 >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "/opt/automq/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9092 >/dev/null 2>&1"]
       interval: 10s
       timeout: 20s
       retries: 30

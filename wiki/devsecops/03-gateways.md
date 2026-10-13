@@ -34,15 +34,15 @@ There is no HTTPS listener. The HTTPS host port is reserved in the k3d port maps
 | `op-2` | 9080 | 9443 |
 | `op-3` | 7080 | 7443 |
 
-Source: `infra/fleet.env`. Every code path takes the port from `pltf_lb_http_port`, which reads `fleet.env`, the same file the k3d configs are rendered from, so the two cannot drift (`scripts/lib/pltfctl/cmds.sh`).
+Source: `infra/k3d/fleet.env`. Every code path takes the port from `pltf_lb_http_port`, which reads `fleet.env`, the same file the k3d configs are rendered from, so the two cannot drift (`scripts/lib/pltfctl/cmds.sh`).
 
 ## Rule: never a new host port
 
-Expose a new service as an `HTTPRoute` on the shared Gateway, not as a new host port. Host port maps can only be declared when a cluster is created, so a new one forces `down` + `up` of the whole distro. Ports also follow a fixed 4-digit convention and must be unique within a distro (`infra/fleet.env`, `infra/k3d/*/*.yaml`, `docs/contributing/03-fleet.md`).
+Expose a new service as an `HTTPRoute` on the shared Gateway, not as a new host port. Host port maps can only be declared when a cluster is created, so a new one forces `down` + `up` of the whole distro. Ports also follow a fixed 4-digit convention and must be unique within a distro (`infra/k3d/fleet.env`, `infra/k3d/*/*.yaml`, `docs/contributing/03-fleet.md`).
 
 ## Hostname scheme
 
-Route hostnames follow `[<prefix>-]<ui>.k3d.workbench.local.gd` (`PLTF_DOMAIN` in `infra/fleet.env`). `local.gd` is a public wildcard domain that resolves to `127.0.0.1`.
+Route hostnames follow `[<prefix>-]<ui>.k3d.workbench.local.gd` (`PLTF_DOMAIN` in `infra/k3d/fleet.env`). `local.gd` is a public wildcard domain that resolves to `127.0.0.1`.
 
 | Cluster | Prefix | Example |
 |---|---|---|

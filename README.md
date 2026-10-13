@@ -24,7 +24,8 @@ throwaway environment on a MacBook or Ubuntu workstation, in one of three
 distros: `lite` (the default: one [k3d](https://k3d.io) cluster on Cilium, 1
 server + 3 agents, with a local OCI registry), `fleet` (three Cilium k3d
 clusters meshed together) or `dev` (no Kubernetes: a Docker Compose stack of
-AutoMQ, Kafka on S3, over RustFS). Every k3d distro runs a GitOps operator
+Kafka, in variants: `strimzi-kraft` by default, `aiven-tiered` (tiered storage on
+RustFS) or `automq` (shared-data on RustFS), chosen in `infra/compose/.variant.env`). Every k3d distro runs a GitOps operator
 ([Flux](https://fluxcd.io), in `flux-system`), an API gateway (KGateway) and a
 Kubernetes dashboard (Kube-Argus) in `kube-system`, and a podinfo test server in
 `kube-public`; Cilium is installed by `cilium-cli` before Flux. Bring it up and tear it down with a
@@ -83,13 +84,16 @@ Then, from the repo root:
   apply changed settings to an existing cluster; for that, `down` and `up`.
 - **`down` removes every pltfctl cluster,** not just the one you last started:
   every k3d cluster (including a `dev` cluster left by an older pltfctl), the
-  registry, the `dev` Compose stack and its volumes, and the shared network.
+  registry, the `dev` Compose stack and its volumes (every variant's), and the shared network.
 - **`down` then prunes Docker host-wide.** It runs `docker system prune -f` and
   `docker volume prune -f`, which remove *every* stopped container, unused
   network, dangling image, the build cache and every unused anonymous volume on
   the machine, not only pltfctl's. Stop here if you keep stopped containers or
   anonymous volumes you care about.
-- **On `dev`,** `verify` and `open` cover the Compose stack; `status` and
+- **On `dev`,** the Kafka variant is `VARIANT_KAFKA` from
+  `infra/compose/.variant.env` (default `strimzi-kraft`); an exported
+  `VARIANT_KAFKA=automq` overrides it for one run. Switching variant needs
+  `down` first. `verify` and `open` cover the running variant; `status` and
   component status only print that they are not available in dev mode (k3d
   distros only); `event-bus` and `event-topic` need `lite`. See
   [wiki/developer/](wiki/developer/00-index.md). `pltfctl up dev`, the renamed
@@ -112,11 +116,16 @@ scripts/            every executable
   projctl           housekeeping: lint, check, new-ns, new-app, clean
   lib/              the functions both scripts source
 infra/              what the project creates
-  fleet.env         the source of truth: distros, clusters, ports, CIDRs, registry,
+  .infra.env        shared by every distro: the distro list, default, each one's kind
+  k3d/              k3d distros only (lite, fleet)
+    fleet.env       the source of truth: clusters, ports, CIDRs, registry,
                     event-bus kinds
-  k3d/<distro>/     k3d cluster templates, filled in from fleet.env
-  compose/<distro>.yaml  Compose stacks (the `dev` distro)
-  network/          the DNS resolver every node uses
+    <distro>/       k3d cluster templates, filled in from fleet.env
+    network/        the DNS resolver every node uses
+  compose/          Compose distros only (dev)
+    compose.env     project name and host ports
+    .variant.env    the default Kafka variant (VARIANT_KAFKA)
+    <distro>-<variant>.yaml  one Compose stack per Kafka variant
 deploy/             what runs on the clusters (Flux resources and manifests)
   k3d-base/         applied to every distro, by namespace
   k3d-<cluster>/    one cluster's additions, by namespace (kafka-system is
@@ -127,7 +136,7 @@ assets/icons/       the banner icons above
 .env.sbom           every pinned external version
 ```
 
-- **Change a port, CIDR or cluster** in `infra/fleet.env`, never in a template or
+- **Change a port, CIDR or cluster** in `infra/k3d/fleet.env`, never in a template or
   a script.
 - **Add something to run on the clusters** under `deploy/`: in `k3d-base/` if every
   distro should get it, otherwise in one cluster's folder. `./scripts/projctl new-app`

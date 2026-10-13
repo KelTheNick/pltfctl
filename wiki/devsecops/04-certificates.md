@@ -16,7 +16,7 @@ This page lists every trust relationship and TLS surface that exists in pltfctl 
 
 ## k3s apiserver certificate
 
-k3s generates the apiserver's serving certificate. kubectl reaches it through `k3d.local.gd` on `127.0.0.1` at the cluster's API port (`infra/k3d/*/*.yaml`, `infra/fleet.env`).
+k3s generates the apiserver's serving certificate. kubectl reaches it through `k3d.local.gd` on `127.0.0.1` at the cluster's API port (`infra/k3d/*/*.yaml`, `infra/k3d/fleet.env`).
 
 **The k3d serverlb's IP is not in the certificate's SANs** (Subject Alternative Names: the names and IPs a certificate is valid for). This is why Cilium's `k8sServiceHost` points at the control-plane node's InternalIP and not at the serverlb. Pointing it at the serverlb would fail certificate validation, and its name also cannot resolve before cluster DNS exists (`scripts/README.md`, `scripts/lib/pltfctl/cilium.sh`).
 
@@ -28,7 +28,7 @@ k3s generates the apiserver's serving certificate. kubectl reaches it through `k
 
 - **Helm ownership stamping.** The copy carries `app.kubernetes.io/managed-by: Helm` and the `meta.helm.sh/release-name: cilium` and `meta.helm.sh/release-namespace: kube-system` annotations. Without them, cilium-cli's Helm release rejects the pre-existing Secret with "invalid ownership metadata". With them, the release adopts it.
 - **Idempotent, but loud on mismatch.** A CA already present and matching is left alone. A CA present and different stops `up` with an error. A mismatch (most often `op-2` recreated with a fresh CA while `op-1` kept its old one) is the most common ClusterMesh failure, and its mTLS errors never point back to the CA. The fix is `down` + `up fleet`.
-- **Why the first cluster is created first and deleted last.** It owns the CA every other cluster trusts (`infra/fleet.env`).
+- **Why the first cluster is created first and deleted last.** It owns the CA every other cluster trusts (`infra/k3d/fleet.env`).
 
 The private key is copied in plaintext through `kubectl` between local contexts. That is acceptable on a single workstation only.
 
@@ -58,7 +58,7 @@ Clients that call 9899 cannot verify this certificate against any trusted CA.
 
 ## Reserved HTTPS LB port
 
-Every k3d template maps a host HTTPS port (8443, 9443 or 7443) to port 443 on the serverlb, because host port maps can only be declared at create time. Nothing listens on it: the Gateway has only an HTTP listener (`infra/k3d/*/*.yaml`, `infra/fleet.env`, `deploy/k3d-base/kube-system/gateway.yaml`).
+Every k3d template maps a host HTTPS port (8443, 9443 or 7443) to port 443 on the serverlb, because host port maps can only be declared at create time. Nothing listens on it: the Gateway has only an HTTP listener (`infra/k3d/*/*.yaml`, `infra/k3d/fleet.env`, `deploy/k3d-base/kube-system/gateway.yaml`).
 
 ## Plain-HTTP registry
 

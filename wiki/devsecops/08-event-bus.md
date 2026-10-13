@@ -1,6 +1,6 @@
 # Event bus
 
-The event bus is Apache Kafka, run by the Strimzi operator, in the `kafka-system` namespace on `lite`. `fleet` has no bus yet. (The developer `dev` distro runs AutoMQ instead, outside Kubernetes: see [AutoMQ on RustFS](../developer/01-automq-rustfs.md).) On `lite` the bus is a toggle on the running platform, not part of `up`:
+The event bus is Apache Kafka, run by the Strimzi operator, in the `kafka-system` namespace on `lite`. `fleet` has no bus yet. (The developer `dev` distro runs Kafka outside Kubernetes instead, as a Compose stack in variants: `strimzi-kraft`, the same Kafka build without the operator, by default, or `aiven-tiered` or `automq` on RustFS: see [Kafka variants](../developer/01-variants.md).) On `lite` the bus is a toggle on the running platform, not part of `up`:
 
 ```sh
 ./scripts/pltfctl up lite               # the platform, without Kafka
@@ -15,7 +15,7 @@ Topics and the clients that use them are managed with `pltfctl event-topic`; see
 
 `up` never starts Kafka: `flux_apply_tree` skips the `kafka-system` folder (`scripts/lib/pltfctl/flux.sh`). `pltfctl event-bus` is implemented in `scripts/lib/pltfctl/kafka.sh` and acts on the running distro's cluster. It refuses when nothing is running, on `fleet`, which has no `kafka-system` folder, and on `dev`, which is not a k3d distro. `event-topic` refuses the same way.
 
-- **Bus kinds** are listed in `PLTF_EVENT_BUSES` in `infra/fleet.env`; `PLTF_EVENT_BUS_DEFAULT` names the one `event-bus up` uses with no argument. The only kind today is `kraft`: Strimzi Kafka in KRaft mode, defined in `deploy/k3d-<cluster>/kafka-system/kraft.yaml`.
+- **Bus kinds** are listed in `PLTF_EVENT_BUSES` in `infra/k3d/fleet.env`; `PLTF_EVENT_BUS_DEFAULT` names the one `event-bus up` uses with no argument. The only kind today is `kraft`: Strimzi Kafka in KRaft mode, defined in `deploy/k3d-<cluster>/kafka-system/kraft.yaml`.
 - **`event-bus up [bus]`:**
   1. Preloads the operator and Kafka images into the cluster.
   2. Applies `namespace.yaml` and `strimzi-operator.yaml`, and waits up to 5 minutes for the HelmRelease to be Ready.

@@ -37,25 +37,32 @@ proj_fail() { pltf_info "[fail] $*"; _pc_rc=1; }
 proj_check() {
   [ $# -eq 0 ] || pltf_die "check takes no arguments"
   _pc_rc=0
-  _all=''; _cl=''; _cni=''; _kind=''; _proj=''
+  _all=''; _cl=''; _cni=''; _kind=''; _proj=''; _cvar=''
   for _d in $PLTF_DISTROS; do
     _du=$(printf '%s' "$_d" | tr '[:lower:]' '[:upper:]')
     eval "_kind=\${PLTF_DISTRO_${_du}_KIND:-k3d}"
     case "$_kind" in
       k3d) ;;
       compose)
-        # A Compose distro has no clusters: one stack file and a project name.
-        [ -f "$PLTFCTL_HOME/infra/compose/$_d.yaml" ] ||
-          proj_fail "infra/compose/$_d.yaml missing for compose distro '$_d'"
+        # A Compose distro has no clusters: one stack file per variant
+        # (infra/compose/<d>-<variant>.yaml), a default variant that has a
+        # file, and a project name.
+        _cvar=$(sed -n 's/^VARIANT_KAFKA=\([A-Za-z0-9-]*\).*/\1/p' \
+          "$PLTFCTL_HOME/infra/compose/.variant.env" 2>/dev/null | tail -n 1)
+        if [ -z "$_cvar" ]; then
+          proj_fail "infra/compose/.variant.env: VARIANT_KAFKA unset"
+        elif [ ! -f "$PLTFCTL_HOME/infra/compose/$_d-$_cvar.yaml" ]; then
+          proj_fail "infra/compose/$_d-$_cvar.yaml missing for default VARIANT_KAFKA=$_cvar"
+        fi
         eval "_proj=\${PLTF_${_du}_PROJECT:-}"
-        [ -n "$_proj" ] || proj_fail "infra/fleet.env: PLTF_${_du}_PROJECT unset"
+        [ -n "$_proj" ] || proj_fail "infra/compose/compose.env: PLTF_${_du}_PROJECT unset"
         continue ;;
-      *) proj_fail "infra/fleet.env: PLTF_DISTRO_${_du}_KIND must be k3d|compose (got '$_kind')"; continue ;;
+      *) proj_fail "infra/.infra.env: PLTF_DISTRO_${_du}_KIND must be k3d|compose (got '$_kind')"; continue ;;
     esac
     eval "_cl=\${PLTF_DISTRO_${_du}_CLUSTERS:-}"
     eval "_cni=\${PLTF_DISTRO_${_du}_CNI:-}"
-    [ -n "$_cl" ] || { proj_fail "infra/fleet.env: PLTF_DISTRO_${_du}_CLUSTERS unset"; continue; }
-    case "$_cni" in flannel | cilium) ;; *) proj_fail "infra/fleet.env: PLTF_DISTRO_${_du}_CNI must be flannel|cilium (got '$_cni')" ;; esac
+    [ -n "$_cl" ] || { proj_fail "infra/k3d/fleet.env: PLTF_DISTRO_${_du}_CLUSTERS unset"; continue; }
+    case "$_cni" in flannel | cilium) ;; *) proj_fail "infra/k3d/fleet.env: PLTF_DISTRO_${_du}_CNI must be flannel|cilium (got '$_cni')" ;; esac
     # Ports, CIDRs and IDs must be unique WITHIN a distro; across distros they
     # deliberately repeat (only one distro runs at a time).
     _seen=''
@@ -69,21 +76,21 @@ proj_check() {
       for _k in $_keys; do
         eval "_v=\${PLTF_${_up}_$_k:-}"
         if [ -z "$_v" ]; then
-          proj_fail "infra/fleet.env: PLTF_${_up}_$_k unset"
+          proj_fail "infra/k3d/fleet.env: PLTF_${_up}_$_k unset"
           continue
         fi
         case "$_k" in DNS_IP) continue ;; ID) _key="ID=$_v" ;; *CIDR) _key="CIDR=$_v" ;; *) _key="PORT=$_v" ;; esac
-        case " $_seen " in *" $_key "*) proj_fail "infra/fleet.env: $_key reused within distro $_d (at $_n)" ;; esac
+        case " $_seen " in *" $_key "*) proj_fail "infra/k3d/fleet.env: $_key reused within distro $_d (at $_n)" ;; esac
         _seen="$_seen $_key"
       done
     done
   done
   # PLTF_ALL_CLUSTERS (teardown order) must name exactly the distros' clusters.
   for _n in $_all; do
-    case " $PLTF_ALL_CLUSTERS " in *" $_n "*) ;; *) proj_fail "infra/fleet.env: $_n missing from PLTF_ALL_CLUSTERS" ;; esac
+    case " $PLTF_ALL_CLUSTERS " in *" $_n "*) ;; *) proj_fail "infra/k3d/fleet.env: $_n missing from PLTF_ALL_CLUSTERS" ;; esac
   done
   for _n in $PLTF_ALL_CLUSTERS; do
-    case " $_all " in *" $_n "*) ;; *) proj_fail "infra/fleet.env: PLTF_ALL_CLUSTERS names $_n, which no distro has" ;; esac
+    case " $_all " in *" $_n "*) ;; *) proj_fail "infra/k3d/fleet.env: PLTF_ALL_CLUSTERS names $_n, which no distro has" ;; esac
   done
   # deploy/k3d-base is shared by every distro; every other deploy/ dir is
   # one context's additions (optional) and must be a known cluster. No
@@ -93,12 +100,12 @@ proj_check() {
     _ctx=$(basename "$_d")
     case " base $_all " in
       *" ${_ctx#k3d-} "*) ;;
-      *) proj_fail "deploy/$_ctx/ matches no distro cluster (infra/fleet.env)" ;;
+      *) proj_fail "deploy/$_ctx/ matches no distro cluster (infra/k3d/fleet.env)" ;;
     esac
     for _p in "$_d"* "$_d"*/*; do
       [ -h "$_p" ] && [ ! -e "$_p" ] && proj_fail "dangling symlink: ${_p#"$PLTFCTL_HOME"/}"
     done
   done
-  [ "$_pc_rc" -eq 0 ] && pltf_ok "Layout matches infra/fleet.env."
+  [ "$_pc_rc" -eq 0 ] && pltf_ok "Layout matches the inventory (infra/.infra.env, k3d/fleet.env, compose/)."
   return "$_pc_rc"
 }

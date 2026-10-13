@@ -64,7 +64,7 @@ relative path.
 - [ ] Every section ends with `[back to top](#pltfctl)` and a divider.
 - [ ] Every relative link and image path resolves.
 - [ ] Commands and paths match the current layout (`scripts/`, `infra/`, `deploy/`, `docs/`).
-- [ ] No port, CIDR or version appears that disagrees with `infra/fleet.env` or `.env.sbom`.
+- [ ] No port, CIDR or version appears that disagrees with `infra/k3d/fleet.env` or `.env.sbom`.
 
 ---
 

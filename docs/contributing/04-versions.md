@@ -9,6 +9,17 @@ version literal in a script is a bug.
   `.env.sbom` and the manifest. A manifest cannot source a shell file, so the YAML stays the
   real pin, and `doctor` checks that the two agree. These entries are tagged `deploy:<path>`
   in `.env.sbom`.
+- **Read by the `dev` Compose stacks** (`KAFKA_IMAGE`, `AUTOMQ_IMAGE`, `RUSTFS_IMAGE`,
+  `MC_IMAGE`, `CURL_IMAGE`, `TS_PLUGIN_*`): edit `.env.sbom` only; `infra/compose/dev-*.yaml`
+  read them through Compose interpolation. `KAFKA_IMAGE` and `TS_PLUGIN_*` serve the
+  `aiven-tiered` variant, `AUTOMQ_IMAGE` the `automq` variant, `RUSTFS_IMAGE`/`MC_IMAGE` both.
+  The default `strimzi-kraft` variant has no pin of its own: it runs
+  `quay.io/strimzi/kafka:<STRIMZI_VERSION>-kafka-<KAFKA_VERSION>`, so bumping `lite`'s Strimzi
+  or Kafka moves it too. Keep `KAFKA_IMAGE` in step with `KAFKA_VERSION`. Bumping
+  `TS_PLUGIN_VERSION` means updating both `TS_PLUGIN_CORE_SHA256` and `TS_PLUGIN_S3_SHA256`
+  to the new release tarballs' hashes, or the `plugin` service fails its checksum and Kafka
+  never starts. Then run `VARIANT_KAFKA=aiven-tiered pltfctl up dev` and `verify`: the plugin is built against an older
+  Kafka, so only a live round trip shows a new pair works.
 
 Run `./scripts/pltfctl doctor` after any bump. It needs no cluster. On a mismatch it names the
 file and the exact literal it expected, and keeps failing until they match. Two pins appear

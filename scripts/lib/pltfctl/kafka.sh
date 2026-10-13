@@ -6,7 +6,7 @@
 #   pltfctl event-bus down       remove both (and the bus's data)
 #   pltfctl event-bus status     operator, Kafka and per-broker start-up state
 #
-# Buses are named in infra/fleet.env (PLTF_EVENT_BUSES). Each is one manifest,
+# Buses are named in infra/k3d/fleet.env (PLTF_EVENT_BUSES). Each is one manifest,
 # deploy/<ctx>/$PLTF_EVENT_BUS_NS/<bus>.yaml, next to the shared
 # namespace.yaml and strimzi-operator.yaml. flux_apply_tree skips that
 # namespace, so a plain `up` never starts Kafka.
@@ -30,7 +30,7 @@ pltf_event_bus_cluster() {
   _eb_d=$(pltf_running_distro) ||
     pltf_die "No pltfctl cluster is running; start one with: pltfctl up [$(pltf_distro_names)]"
   [ "$(pltf_distro_kind "$_eb_d")" = k3d ] ||
-    pltf_die "The $_eb_d distro is Compose and its Kafka is AutoMQ (localhost:$PLTF_DEV_KAFKA_PORT); event-bus and event-topic need the lite distro"
+    pltf_die "The $_eb_d distro is Compose and its Kafka is upstream Kafka with tiered storage (localhost:$PLTF_DEV_KAFKA_PORT); event-bus and event-topic need the lite distro"
   _eb_c=$(pltf_distro_clusters "$_eb_d" | head -n 1)
   [ -d "$PLTF_DEPLOY_DIR/k3d-$_eb_c/$PLTF_EVENT_BUS_NS" ] ||
     pltf_die "The $_eb_d distro has no event bus (no deploy/k3d-$_eb_c/$PLTF_EVENT_BUS_NS/)"

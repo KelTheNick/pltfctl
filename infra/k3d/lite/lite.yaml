@@ -1,7 +1,7 @@
 ---
 # distro: lite (default) — one cluster, Cilium networking.  Context: k3d-lite
 #
-# TEMPLATE: every PLTF_* placeholder is filled from infra/fleet.env by
+# TEMPLATE: every PLTF_* placeholder is filled from infra/k3d/fleet.env by
 # envsubst at create time. fleet.env is authoritative for every value.
 #
 # Posture:
@@ -51,7 +51,7 @@ registries:
 
 # Static upstream resolver: the Docker bridge gateway k3s auto-detects runs
 # no DNS listener, so external chart pulls would fail. See
-# infra/network/resolv.conf.
+# infra/k3d/network/resolv.conf.
 volumes:
   - volume: $PLTF_RESOLV_CONF:/etc/pltfctl/resolv.conf:ro
     nodeFilters:

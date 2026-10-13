@@ -114,7 +114,7 @@ Cilium one — a plain pod's `ping` to that same gateway address succeeds once
 Cilium owns the datapath, so Cilium was never what stood between a pod and
 that address. The gateway simply was never a DNS server, for any caller.
 
-The fix is a bind-mounted, working resolver file: `infra/network/resolv.conf`,
+The fix is a bind-mounted, working resolver file: `infra/k3d/network/resolv.conf`,
 mounted into every node and pointed at by k3s's `--resolv-conf` extraArg (see
 every template under `infra/k3d/<distro>/`). `PLTF_RESOLV_CONF` overrides which file gets
 mounted, for an internal/corporate resolver behind a VPN or on an air-gapped
@@ -283,6 +283,26 @@ serves it, even when the port was copied from another cluster's.
 `envsubst` is given the variable by name. A bare `envsubst` would also rewrite
 every other `$` in the YAML, and a second variable on that allow-list would be a
 second route for a per-cluster value into the shared tree.
+
+## Compose variants
+
+The `dev` distro has one Compose file per Kafka variant,
+`infra/compose/dev-<variant>.yaml`, and all of them run under the same project
+name (`PLTF_DEV_PROJECT`). `compose.sh` does two non-obvious things because of
+that.
+
+It asks Docker, not `.variant.env`, which variant is running. The file that
+started a stack is recorded in the `com.docker.compose.project.config_files`
+label on the `kafka` container; `pltf_compose_running_variant` strips it to
+the variant name. `.variant.env` says what the next `up` wants, which may have
+changed since the stack started, so `verify` and the switch guard in `up`
+would be wrong to trust it. Every variant names its broker `kafka` so that this
+lookup, and `verify`, work the same on all of them.
+
+`down` runs `docker compose down -v --remove-orphans` once per variant file.
+Compose only removes the volumes declared in the file it is given, so a single
+`down` with the current variant would leave another variant's volumes behind
+(and the next `up` of that variant would resume on stale data).
 
 ## The SBOM
 

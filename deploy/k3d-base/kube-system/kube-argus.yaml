@@ -67,7 +67,7 @@ spec:
 ---
 # Exposes kube-argus through the kgateway Gateway (gateway.yaml) at
 # argus.k3d.workbench.local.gd on host :80; the dashboard lands at
-# http://[<prefix>-]argus.k3d.workbench.local.gd:<lb-port> (see infra/fleet.env).
+# http://[<prefix>-]argus.k3d.workbench.local.gd:<lb-port> (see infra/k3d/fleet.env).
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

@@ -1,6 +1,6 @@
 # DevSecOps reference
 
-This set gathers the setup context for pltfctl in one place, organised by DevSecOps concern. Today that context is spread across script comments, `scripts/README.md`, `infra/fleet.env`, the k3d templates and the `deploy/` manifests. Each page says what exists, why it is set up that way, and what breaks if a rule is broken. Every fact names the source file it comes from, so you can check it against the code.
+This set gathers the setup context for pltfctl in one place, organised by DevSecOps concern. Today that context is spread across script comments, `scripts/README.md`, `infra/k3d/fleet.env`, the k3d templates and the `deploy/` manifests. Each page says what exists, why it is set up that way, and what breaks if a rule is broken. Every fact names the source file it comes from, so you can check it against the code.
 
 ## Posture
 

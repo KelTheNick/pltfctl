@@ -13,7 +13,8 @@ namespace, in this order:
 ## Shared vs per-context
 
 This applies to the k3d distros, `lite` and `fleet`. The `dev` distro has no Kubernetes and no
-`deploy/` directory: it is `infra/compose/dev.yaml`.
+`deploy/` directory: it is one of `infra/compose/dev-<variant>.yaml`, picked by
+`infra/compose/.variant.env` ([Kafka variants](../../wiki/developer/01-variants.md)).
 
 Anything every k3d distro should get goes in `deploy/k3d-base/`: the Flux sources, the
 kgateway and kube-argus HelmReleases, the shared Gateway, and the `podinfo` sample
@@ -24,7 +25,7 @@ kgateway and kube-argus HelmReleases, the shared Gateway, and the `podinfo` samp
 - `kafka-system` is a toggle, not part of `up`: `flux_apply_tree` skips it, and
   `pltfctl event-bus up [bus]` applies `namespace.yaml`, `strimzi-operator.yaml` and `<bus>.yaml`
   (`scripts/lib/pltfctl/kafka.sh`). A new bus kind is a new `<bus>.yaml` plus its name in
-  `PLTF_EVENT_BUSES` (`infra/fleet.env`).
+  `PLTF_EVENT_BUSES` (`infra/k3d/fleet.env`).
 - `deploy/k3d-op-1/` symlinks `flux-system`, `kube-public` and `kube-system` to lite's. It does not
   link `kafka-system`, so `fleet` has no bus.
 - `deploy/k3d-op-2/` and `deploy/k3d-op-3/` symlink each namespace directory to `deploy/k3d-op-1/`.

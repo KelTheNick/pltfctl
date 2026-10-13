@@ -8,13 +8,13 @@ This page covers how pods get addresses, how traffic is routed inside and betwee
 |---|---|---|---|
 | `lite`, `fleet` | Cilium (eBPF) | no, Cilium replaces it | disabled in k3s |
 
-Sources: `infra/fleet.env`, `infra/k3d/lite/lite.yaml`, `infra/k3d/fleet/*.yaml`.
+Sources: `infra/k3d/fleet.env`, `infra/k3d/lite/lite.yaml`, `infra/k3d/fleet/*.yaml`.
 
 No distro uses flannel today; `PLTF_DISTRO_<D>_CNI=flannel` is still a valid value.
 
 On Cilium distros the k3s server runs with `--flannel-backend=none`, `--disable-network-policy` and `--disable-kube-proxy`. Nodes stay `NotReady` until `cilium install` runs. Cilium is installed with `kubeProxyReplacement=true` (`scripts/lib/pltfctl/cilium.sh`).
 
-Consequence: on `lite` and `fleet`, any tool that works by editing kube-proxy's iptables rules has nothing to edit. Submariner is the case that surfaced this. Do not record it as "Cilium conflicts with Submariner": Cilium runs alongside kube-proxy perfectly well and does not need to replace it. Replacing kube-proxy is pltfctl's choice, not a Cilium limitation. Undoing it needs a rebuild and two changes together: drop `--flannel-backend=none` and `--disable-kube-proxy` from the distro's k3d template, and set `PLTF_DISTRO_<D>_CNI=flannel` in `infra/fleet.env` so Cilium is not installed. Changing only `CNI` would leave the cluster with no network at all.
+Consequence: on `lite` and `fleet`, any tool that works by editing kube-proxy's iptables rules has nothing to edit. Submariner is the case that surfaced this. Do not record it as "Cilium conflicts with Submariner": Cilium runs alongside kube-proxy perfectly well and does not need to replace it. Replacing kube-proxy is pltfctl's choice, not a Cilium limitation. Undoing it needs a rebuild and two changes together: drop `--flannel-backend=none` and `--disable-kube-proxy` from the distro's k3d template, and set `PLTF_DISTRO_<D>_CNI=flannel` in `infra/k3d/fleet.env` so Cilium is not installed. Changing only `CNI` would leave the cluster with no network at all.
 
 ## CIDRs
 
@@ -24,9 +24,9 @@ Consequence: on `lite` and `fleet`, any tool that works by editing kube-proxy's 
 | `op-2` | 10.44.0.0/16 | 10.45.0.0/16 | 10.45.0.10 |
 | `op-3` | 10.46.0.0/16 | 10.47.0.0/16 | 10.47.0.10 |
 
-Source: `infra/fleet.env`.
+Source: `infra/k3d/fleet.env`.
 
-**Rule: CIDRs must not overlap within a meshed distro.** ClusterMesh routes pod and service addresses between clusters; if two clusters share a range, an address is ambiguous. Repeating ranges across distros is fine because only one distro runs at a time. CIDRs are create-time only (`infra/fleet.env`, `docs/contributing/03-fleet.md`).
+**Rule: CIDRs must not overlap within a meshed distro.** ClusterMesh routes pod and service addresses between clusters; if two clusters share a range, an address is ambiguous. Repeating ranges across distros is fine because only one distro runs at a time. CIDRs are create-time only (`infra/k3d/fleet.env`, `docs/contributing/03-fleet.md`).
 
 ## k8sServiceHost is the control-plane InternalIP
 
@@ -47,9 +47,9 @@ pltfctl ships no `CiliumLoadBalancerIPPool`. A pool is cluster-wide and claims e
 
 ## DNS
 
-**The Docker bridge gateway is silent.** k3s points a node's `resolv.conf` at the gateway of the Docker bridge network, and CoreDNS forwards there by default. That address runs no DNS listener at all. This was confirmed with a plain Docker container on the same bridge, with no Kubernetes or Cilium involved. Left alone, CoreDNS returns `SERVFAIL` and Flux cannot pull external charts (`infra/network/resolv.conf`, `scripts/README.md`).
+**The Docker bridge gateway is silent.** k3s points a node's `resolv.conf` at the gateway of the Docker bridge network, and CoreDNS forwards there by default. That address runs no DNS listener at all. This was confirmed with a plain Docker container on the same bridge, with no Kubernetes or Cilium involved. Left alone, CoreDNS returns `SERVFAIL` and Flux cannot pull external charts (`infra/k3d/network/resolv.conf`, `scripts/README.md`).
 
-**The fix.** Every k3d template bind-mounts a resolver file at `/etc/pltfctl/resolv.conf` and passes `--resolv-conf=/etc/pltfctl/resolv.conf` to k3s. The default file is `infra/network/resolv.conf` (`1.1.1.1`, `8.8.8.8`). This applies to all distros, including `lite`, because it is a host fact, not a CNI one (`infra/k3d/*/*.yaml`).
+**The fix.** Every k3d template bind-mounts a resolver file at `/etc/pltfctl/resolv.conf` and passes `--resolv-conf=/etc/pltfctl/resolv.conf` to k3s. The default file is `infra/k3d/network/resolv.conf` (`1.1.1.1`, `8.8.8.8`). This applies to all distros, including `lite`, because it is a host fact, not a CNI one (`infra/k3d/*/*.yaml`).
 
 **`PLTF_RESOLV_CONF`** overrides which file is mounted. Use it on a corporate LAN, behind a VPN that blocks outbound port 53, on an air-gapped host, or to reach an internal chart source. Its default is resolved in `scripts/pltfctl` because the plain `envsubst` used for templates cannot expand `${VAR:-default}` (`scripts/pltfctl`, `scripts/README.md`).
 
@@ -92,7 +92,7 @@ All host ports bind to the workstation. See [Gateways](03-gateways.md) for the L
 | `op-3` | 6552 | 7080 | 7443 |
 | registry (`lite`, `op-1`) | 5001 | | |
 
-The API binds to `127.0.0.1` under the host name `k3d.local.gd`, which resolves to `127.0.0.1`. The registry's `host` is `0.0.0.0` (`infra/fleet.env`, `infra/k3d/*/*.yaml`).
+The API binds to `127.0.0.1` under the host name `k3d.local.gd`, which resolves to `127.0.0.1`. The registry's `host` is `0.0.0.0` (`infra/k3d/fleet.env`, `infra/k3d/*/*.yaml`).
 
 ---
 

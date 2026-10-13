@@ -18,7 +18,7 @@ done
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$self")" && pwd)
 
 PLTFCTL_HOME=${PLTFCTL_HOME:-$(CDPATH='' cd -- "$script_dir/.." && pwd)}
-[ -f "$PLTFCTL_HOME/infra/fleet.env" ] || {
+[ -f "$PLTFCTL_HOME/infra/k3d/fleet.env" ] || {
   printf '[err ] PLTFCTL_HOME is not a pltfctl checkout: %s\n' "$PLTFCTL_HOME" >&2
   exit 1
 }
@@ -26,8 +26,14 @@ readonly PLTFCTL_HOME
 export PLTFCTL_HOME
 
 # shellcheck source-path=SCRIPTDIR
-# shellcheck source=../infra/fleet.env
-. "$PLTFCTL_HOME/infra/fleet.env"
+# shellcheck source=../infra/.infra.env
+. "$PLTFCTL_HOME/infra/.infra.env"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../infra/k3d/fleet.env
+. "$PLTFCTL_HOME/infra/k3d/fleet.env"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../infra/compose/compose.env
+. "$PLTFCTL_HOME/infra/compose/compose.env"
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/core/log.sh
 . "$PLTFCTL_HOME/scripts/lib/core/log.sh"
@@ -45,7 +51,7 @@ usage() {
   cat <<'USAGE'
 Usage:
   projctl lint                     sh -n + shellcheck (if installed) on every script.
-  projctl check                    Layout invariants: fleet.env vs infra/ and deploy/,
+  projctl check                    Layout invariants: the infra/ env files vs infra/ and deploy/,
                                    unique ports/CIDRs/IDs, no dangling symlinks.
   projctl new-ns  <ctx> <ns>       Scaffold deploy/<ctx>/<ns>/namespace.yaml.
   projctl new-app <ctx> <ns> <app> Scaffold deploy/<ctx>/<ns>/<app>.yaml: a Flux

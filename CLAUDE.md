@@ -13,8 +13,9 @@ older layout.
 
 ## Working rules
 
-- **Check the code before you state a fact.** `infra/fleet.env` (distros, clusters, ports,
-  CIDRs), `.env.sbom` (versions) and `deploy/` (manifests) are the sources of truth. Docs
+- **Check the code before you state a fact.** `infra/.infra.env` (distros),
+  `infra/k3d/fleet.env` (k3d clusters, ports, CIDRs), `infra/compose/` (Compose stacks and their
+  env), `.env.sbom` (versions) and `deploy/` (manifests) are the sources of truth. Docs
   describe them; when the two disagree, the code wins and the doc needs fixing.
 - **Read the guardrails before changing Cilium, the mesh, `deploy/` or `verify`:**
   `docs/contributing/06-invariants.md`.
