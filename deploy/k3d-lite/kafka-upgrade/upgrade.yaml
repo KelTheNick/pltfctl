@@ -1,0 +1,84 @@
+# The 'upgrade' bus: a second Kafka, in its own namespace, at the newer
+# KAFKA_VERSION (.env.sbom) while kafka-system runs KAFKA_BASE_VERSION. 1 node.
+# Both are managed by their own namespace-scoped Strimzi operator and share one
+# set of CRDs (see strimzi-operator.yaml). Same sizing and layout as kraft.yaml.
+#
+# local-path (k3s's default StorageClass) creates each PV as a directory on
+# the node the pod first lands on, and pins the pod to that node from then on.
+# The two JBOD volumes per node are therefore two directories on one
+# Docker-backed disk: the layout is real JBOD, the disk separation is not.
+#
+# Sized for a 16GB laptop (wiki/devsecops/08-event-bus.md#capacity): the heap
+# is half the container limit, leaving the rest for off-heap and page cache.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: kraft-broker
+  namespace: kafka-upgrade
+  labels:
+    strimzi.io/cluster: upgrade
+spec:
+  replicas: 1
+  roles: [controller, broker]
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        class: local-path
+        size: 5Gi
+        kraftMetadata: shared
+        deleteClaim: true
+      - id: 1
+        type: persistent-claim
+        class: local-path
+        size: 5Gi
+        deleteClaim: true
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits: { memory: 768Mi }
+  jvmOptions:
+    -Xms: 384m
+    -Xmx: 384m
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: upgrade
+  namespace: kafka-upgrade
+spec:
+  kafka:
+    version: 4.3.1
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+        # mTLS: a client is the CN of a certificate from the clients CA,
+        # issued by `pltfctl event-topic grant` (KafkaUser).
+        authentication:
+          type: tls
+    # ACLs from each KafkaUser. ANONYMOUS is the plain listener's every
+    # client: kept a super user so 9092 stays open in-cluster, as before.
+    authorization:
+      type: simple
+      superUsers: [ANONYMOUS]
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+  entityOperator:
+    topicOperator:
+      resources:
+        requests: { cpu: 50m, memory: 192Mi }
+        limits: { memory: 192Mi }
+    userOperator:
+      resources:
+        requests: { cpu: 50m, memory: 192Mi }
+        limits: { memory: 192Mi }

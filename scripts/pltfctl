@@ -132,12 +132,21 @@ Usage:
                                 same protocols across the ClusterMesh. Both: HTTP
                                 from this host through the gateway (curl).
   pltfctl doctor                Verify required tools are on PATH + SBOM drift.
-  pltfctl event-bus up [kraft]  Add the event bus to the running lite distro.
-                                Default: kraft (Strimzi Kafka, KRaft).
-  pltfctl event-bus down        Remove the event bus and its data.
-  pltfctl event-bus status      Operator, Kafka, and
-                                each pod's state (live, starting,
-                                CrashLoopBackOff...) and usage. Exit 0 when Ready.
+  pltfctl event-bus up [kraft|upgrade]
+                                Add an event bus to the running k3d distro
+                                (lite, or fleet's ops). Default: kraft
+                                (Strimzi Kafka, KRaft, in kafka-system, at
+                                KAFKA_BASE_VERSION). upgrade is a second Kafka
+                                at the newer KAFKA_VERSION in kafka-upgrade,
+                                with its own namespace-scoped operator; it needs
+                                kraft up first.
+  pltfctl event-bus down [upgrade]
+                                Remove both buses and their data (upgrade
+                                first), or only the upgrade bus.
+  pltfctl event-bus status [upgrade]
+                                Operator, Kafka, and each pod's state (live,
+                                starting, CrashLoopBackOff...) and usage, then
+                                the upgrade bus if on. Exit 0 when Ready.
   pltfctl event-topic create <topic> [--partitions N] [--replicas N]
   pltfctl event-topic delete <topic>
   pltfctl event-topic list      Topics and users on the event bus.
@@ -255,10 +264,18 @@ main() {
           require_no_args "$@"
           cmd_event_bus_up "$bus"
           ;;
-        down) require_no_args "$@"; cmd_event_bus_down ;;
-        status) require_no_args "$@"; cmd_event_bus_status ;;
+        down | status)
+          bus=''
+          if [ "$#" -ge 1 ]; then
+            [ "$1" = upgrade ] ||
+              pltf_die "Unknown event bus: $1 (down and status take: upgrade)"
+            bus=$1; shift
+          fi
+          require_no_args "$@"
+          if [ "$action" = down ]; then cmd_event_bus_down "$bus"; else cmd_event_bus_status "$bus"; fi
+          ;;
         -h | --help) usage ;;
-        *) pltf_die "Usage: pltfctl event-bus up [$(pltf_event_bus_names)] | down | status" ;;
+        *) pltf_die "Usage: pltfctl event-bus up [$(pltf_event_bus_names)] | down [upgrade] | status [upgrade]" ;;
       esac
       ;;
     event-topic)

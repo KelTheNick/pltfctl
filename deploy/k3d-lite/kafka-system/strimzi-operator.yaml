@@ -1,8 +1,10 @@
 # Strimzi cluster operator. Source (HelmRepository `strimzi`) lives in
 # repositories.yaml.
 #
-# Watches only its own namespace (the chart default). A bus in another
-# namespace needs that namespace added to watchNamespaces.
+# Namespace-scoped: watchNamespaces lists only kafka-system. This release is
+# the first operator and owns what the 'upgrade' bus's operator reuses
+# (kafka-upgrade/strimzi-operator.yaml): the CRDs and the cluster-wide
+# ClusterRoles, so it must outlive that one.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -26,3 +28,5 @@ spec:
     crds: CreateReplace
   values:
     fullnameOverride: strimzi-cluster-operator
+    watchNamespaces:
+      - kafka-system

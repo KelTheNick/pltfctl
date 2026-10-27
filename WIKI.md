@@ -17,7 +17,7 @@ Start at the [index](wiki/devsecops/00-index.md); each page links to the next.
 5. [Identity and access](wiki/devsecops/05-iam.md): kubeconfig identities, ServiceAccounts, namespaces and where secrets live.
 6. [Storage](wiki/devsecops/06-storage.md): placeholder.
 7. [Database](wiki/devsecops/07-database.md): placeholder (CloudNativePG).
-8. [Event bus](wiki/devsecops/08-event-bus.md): Strimzi Kafka as a toggle on lite (`pltfctl event-bus`), topology, JBOD on local-path, and the 16GB-laptop memory budget.
+8. [Event bus](wiki/devsecops/08-event-bus.md): Strimzi Kafka as a toggle on lite and fleet (`pltfctl event-bus`), the second `kafka-upgrade` bus on a newer Kafka (namespace-scoped operators, shared CRDs), topology, JBOD on local-path, and the 16GB-laptop memory budget.
 9. [Distributed cache](wiki/devsecops/09-distributed-cache.md): placeholder (Redis or Dragonfly).
 
 ## Developer reference

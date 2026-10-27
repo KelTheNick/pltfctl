@@ -12,6 +12,9 @@ version literal in a script is a bug.
 - **Read by the `dev` Compose stack:** nothing of its own. The `strimzi-kraft` variant runs
   `quay.io/strimzi/kafka:<STRIMZI_VERSION>-kafka-<KAFKA_VERSION>`, so bumping `lite`'s Strimzi
   or Kafka moves it too.
+- **Kafka versions for the event buses:** `KAFKA_VERSION` (the `upgrade` bus) and
+  `KAFKA_BASE_VERSION` (the `kraft` bus) must both be in the Strimzi release's supported list
+  (`kafka-versions.yaml`), with `KAFKA_VERSION` the newer. Bumping `STRIMZI_VERSION` may move that list.
 
 Run `./scripts/pltfctl doctor` after any bump. It needs no cluster. On a mismatch it names the
 file and the exact literal it expected, and keeps failing until they match. Two pins appear
