@@ -1,1 +1,6 @@
-../../k3d-lite/kafka-upgrade/namespace.yaml
+# fleet's second Kafka, at the newer version, in its own namespace with its
+# own namespace-scoped Strimzi operator.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kafka-upgrade

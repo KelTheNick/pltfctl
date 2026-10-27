@@ -78,8 +78,7 @@ Then, from the repo root:
                                   #   gateway, samples, event-bus
 ./scripts/pltfctl open            # lists the UI URLs; `open podinfo` opens one
 ./scripts/pltfctl verify          # proves HTTP, TCP, TLS and gRPC work
-./scripts/pltfctl event-bus up    # optional: adds Kafka (1 broker on lite, 3 on fleet); `event-bus status`, `event-bus down`
-./scripts/pltfctl event-bus up upgrade   # optional: a second Kafka (newer version) in kafka-upgrade
+./scripts/pltfctl event-bus up    # optional: adds Kafka (lite: 1 broker; fleet: two Kafkas, 3 brokers each); `event-bus status`, `event-bus down`
 ./scripts/pltfctl event-topic grant app orders   # a topic's client identity: mTLS cert, ACLs, quotas
 ./scripts/pltfctl down            # deletes every pltfctl cluster and stack, then prunes Docker
 ```

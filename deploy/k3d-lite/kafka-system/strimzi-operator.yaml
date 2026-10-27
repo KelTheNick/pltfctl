@@ -1,10 +1,10 @@
 # Strimzi cluster operator. Source (HelmRepository `strimzi`) lives in
 # repositories.yaml.
 #
-# Namespace-scoped: watchNamespaces lists only kafka-system. This release is
-# the first operator and owns what the 'upgrade' bus's operator reuses
-# (kafka-upgrade/strimzi-operator.yaml): the CRDs and the cluster-wide
-# ClusterRoles, so it must outlive that one.
+# Namespace-scoped: watchNamespaces lists only kafka-system. On fleet this is
+# the first operator and owns what kafka-upgrade's operator reuses
+# (deploy/k3d-ops/kafka-upgrade/strimzi-operator.yaml): the CRDs and the
+# cluster-wide ClusterRoles, so it must outlive that one.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

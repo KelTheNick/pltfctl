@@ -44,10 +44,14 @@
   (`scripts/lib/pltfctl/cilium.sh`, `scripts/lib/pltfctl/images.sh`).
 - **Hubble relay and UI stay off by default.** They are opt-in through `PLTF_ENABLE=hubble`
   (`scripts/lib/pltfctl/cilium.sh`); the 16GB-laptop memory budget assumes they are off.
-- **One Kafka bus per cluster, in `kafka-system`.** The memory budget in
-  `wiki/devsecops/08-event-bus.md` has room for one.
-- **`up` never starts the event bus.** `flux_apply_tree` skips `$PLTF_EVENT_BUS_NS`
-  (`kafka-system`); only `pltfctl event-bus up` applies it. Removing that skip puts Kafka on
+- **At most two Kafkas per cluster: `kafka-system`, and `kafka-upgrade` on `fleet` only.** The
+  memory budget in `wiki/devsecops/08-event-bus.md` has room for two three-broker Kafkas on
+  `fleet`, and for one on `lite`.
+- **The second operator must not install CRDs or ClusterRoles** (`crds: Skip`,
+  `createGlobalResources: false` in `kafka-upgrade/strimzi-operator.yaml`), and `event-bus down`
+  removes it before `kafka-system`'s. Both the ClusterRoles and CRDs belong to `kafka-system`'s release.
+- **`up` never starts the event bus.** `flux_apply_tree` skips `$PLTF_EVENT_BUS_NS` and
+  `$PLTF_EVENT_BUS_SECOND_NS` (`kafka-system`, `kafka-upgrade`); only `pltfctl event-bus up` applies it. Removing that skip puts Kafka on
   every `up`.
 - **`verify-*.yaml` stays out of `up`.** `flux_apply_tree` skips those files by name, and
   `pltfctl verify` applies them itself. Renaming one makes its Job run on every `up`.

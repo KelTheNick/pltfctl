@@ -90,7 +90,7 @@ flux_apply_tree() { # ctx
   for _tree in $_trees; do
     for _ns_dir in "$_tree"/*/; do
       # The event bus is a toggle (`pltfctl event-bus up`), never part of `up`.
-      case "$_ns_dir" in */"$PLTF_EVENT_BUS_NS"/ | */"$PLTF_EVENT_BUS_UPGRADE_NS"/) continue ;; esac
+      case "$_ns_dir" in */"$PLTF_EVENT_BUS_NS"/ | */"$PLTF_EVENT_BUS_SECOND_NS"/) continue ;; esac
       for _f in "$_ns_dir"namespace.yaml "$_ns_dir"repositories.yaml "$_ns_dir"registry.yaml; do
         [ -e "$_f" ] && flux_apply_file "$_ctx" "$_f" >/dev/null
       done
@@ -104,7 +104,7 @@ flux_apply_tree() { # ctx
       # verify-*.yaml are run-on-demand checks (Jobs) that `pltfctl verify`
       # applies itself; applying them here would run them on every `up`.
       case "${_f##*/}" in verify-*) continue ;; esac
-      case "$_f" in */"$PLTF_EVENT_BUS_NS"/* | */"$PLTF_EVENT_BUS_UPGRADE_NS"/*) continue ;; esac
+      case "$_f" in */"$PLTF_EVENT_BUS_NS"/* | */"$PLTF_EVENT_BUS_SECOND_NS"/*) continue ;; esac
       _pending="$_pending $_f"
     done
   done

@@ -6,11 +6,10 @@ The event bus is Apache Kafka, run by the Strimzi operator, in the `kafka-system
 ./scripts/pltfctl up lite               # the platform, without Kafka
 ./scripts/pltfctl event-bus up          # same as `event-bus up kraft`
 ./scripts/pltfctl event-bus status      # operator, Kafka, per-pod state and usage
-./scripts/pltfctl event-bus up upgrade  # a second Kafka, newer version, in kafka-upgrade
-./scripts/pltfctl event-bus status upgrade
-./scripts/pltfctl event-bus down        # removes both buses (upgrade first) and their data
-./scripts/pltfctl event-bus down upgrade  # removes only the upgrade bus
+./scripts/pltfctl event-bus down        # removes Kafka, the operator(s) and the data
 ```
+
+On `fleet`, `event-bus up` installs two Kafkas, in `kafka-system` (4.2.1) and `kafka-upgrade` (4.3.1); see [Two Kafkas on fleet](#two-kafkas-on-fleet). `lite` gets `kafka-system` only.
 
 Topics and the clients that use them are managed with `pltfctl event-topic`; see [Identities](#identities).
 
@@ -41,10 +40,10 @@ Topics and the clients that use them are managed with `pltfctl event-topic`; see
 | Component | Version | Pinned in |
 |---|---|---|
 | Strimzi operator and Helm chart | `1.2.0` | `.env.sbom` `STRIMZI_VERSION`, `deploy/k3d-lite/kafka-system/strimzi-operator.yaml` |
-| Kafka in `kafka-system` (`kraft`) | `4.2.1` | `.env.sbom` `KAFKA_BASE_VERSION`, every `kafka-system/kraft.yaml` under `deploy/` |
-| Kafka in `kafka-upgrade` (`upgrade`) | `4.3.1` (Strimzi 1.2.0's default and newest supported) | `.env.sbom` `KAFKA_VERSION`, every `kafka-upgrade/upgrade.yaml` under `deploy/` |
+| Kafka in `kafka-system` | `4.2.1` | `.env.sbom` `KAFKA_BASE_VERSION`, every `kafka-system/kraft.yaml` under `deploy/` |
+| Kafka in `kafka-upgrade` (`fleet` only) | `4.3.1` (Strimzi 1.2.0's default and newest supported) | `.env.sbom` `KAFKA_VERSION`, `deploy/k3d-ops/kafka-upgrade/kraft.yaml` |
 
-Strimzi 1.2.0 supports Kafka 4.2.0, 4.2.1, 4.3.0 and 4.3.1 (`kafka-versions.yaml` in its repo), so `4.3.1` is the newest a bus can run on it and `kraft` runs an older one in the same span. Strimzi's 1.x line serves the `kafka.strimzi.io/v1` API and is KRaft-only: there is no ZooKeeper, and every cluster is built from `KafkaNodePool`s. `pltfctl doctor` fails if the manifests and `.env.sbom` disagree (`scripts/lib/pltfctl/sbom.sh`). `event-bus up` preloads the operator and Kafka images (`pltf_images_event_bus` in `scripts/lib/pltfctl/kafka.sh`).
+Strimzi 1.2.0 supports Kafka 4.2.0, 4.2.1, 4.3.0 and 4.3.1 (`kafka-versions.yaml` in its repo), so `4.3.1` is the newest a Kafka can run on it and `kafka-system` runs an older one in the same span. Strimzi's 1.x line serves the `kafka.strimzi.io/v1` API and is KRaft-only: there is no ZooKeeper, and every cluster is built from `KafkaNodePool`s. `pltfctl doctor` fails if the manifests and `.env.sbom` disagree (`scripts/lib/pltfctl/sbom.sh`). `event-bus up` preloads the operator and Kafka images (`pltf_images_event_bus` in `scripts/lib/pltfctl/kafka.sh`).
 
 ## Operator
 
@@ -54,18 +53,18 @@ Flux installs the `strimzi-kafka-operator` chart from the OCI `HelmRepository` `
 - **Resources:** the chart defaults apply, 200m CPU and 384Mi memory requested, 384Mi limit.
 - **CRDs:** the HelmRelease creates and replaces them (`crds: CreateReplace`).
 
-## The upgrade bus
+## Two Kafkas on fleet
 
-`pltfctl event-bus up upgrade` adds a second Kafka, `upgrade`, in the `kafka-upgrade` namespace, at the newer `KAFKA_VERSION` while `kafka-system` runs `KAFKA_BASE_VERSION` (`deploy/<ctx>/kafka-upgrade/`, `PLTF_EVENT_BUS_UPGRADE_NS` in `infra/k3d/fleet.env`). It is the same shape as `kraft` (one broker on `lite`, three on `fleet`). Clients use `upgrade-kafka-bootstrap.kafka-upgrade:9092` (`:9093` for mTLS).
+On `fleet`, `pltfctl event-bus up` installs a second Kafka after the first: `kafka-upgrade`, at the newer `KAFKA_VERSION` while `kafka-system` runs `KAFKA_BASE_VERSION` (`deploy/k3d-ops/kafka-upgrade/`; the namespace is `PLTF_EVENT_BUS_SECOND_NS` in `infra/k3d/fleet.env`). It is the same shape as `kafka-system` (three brokers, one per agent). The Kafka cluster is named `upgrade`, so clients use `upgrade-kafka-bootstrap.kafka-upgrade:9092` (`:9093` for mTLS). `lite` has no `kafka-upgrade` directory, so it runs one Kafka. The script installs a second namespace wherever that directory exists (`pltf_event_bus_namespaces` in `scripts/lib/pltfctl/kafka.sh`).
 
-**Each namespace has its own operator.** A Strimzi operator is namespace-scoped here, so `kafka-upgrade` gets a second HelmRelease (`kafka-upgrade/strimzi-operator.yaml`) with `watchNamespaces: [kafka-upgrade]`. Rendered with `helm template`, its `STRIMZI_NAMESPACE` is `kafka-upgrade`. Neither operator watches the other's namespace.
+**Each namespace has its own operator.** A Strimzi operator is namespace-scoped here, so `kafka-upgrade` gets a second HelmRelease (`strimzi-operator.yaml`) with `watchNamespaces: [kafka-upgrade]`. Rendered with `helm template`, its `STRIMZI_NAMESPACE` is `kafka-upgrade`. Neither operator watches the other's namespace.
 
 **The two operators share one set of CRDs and ClusterRoles.** The CRDs are cluster-scoped, and the chart's ClusterRoles have fixed names, so a second full install would collide with the first:
-- The `upgrade` release sets `crds: Skip`, so the CRDs come only from the `kraft` release.
+- The `kafka-upgrade` release sets `crds: Skip`, so the CRDs come only from `kafka-system`'s release.
 - It sets `createGlobalResources: false`, so the chart creates no ClusterRoles or ClusterRoleBindings. It still creates this namespace's RoleBindings to the existing ClusterRoles (the render has only ConfigMap, Deployment, ServiceAccount and RoleBindings).
 - The chart's one cluster-wide binding, for `storageclasses get` and `nodes list`, would also be missing. `strimzi-operator.yaml` adds `strimzi-cluster-operator-kafka-upgrade` to restore it. The rack-awareness and kafka-client bindings are not restored; nothing here uses them.
 
-**The order matters.** `event-bus up upgrade` refuses unless the `kraft` operator is Ready, because it depends on that release's CRDs and ClusterRoles. `event-bus down` removes `upgrade` first and `kraft` last, and deletes the extra ClusterRoleBinding; `down upgrade` removes only the upgrade bus. `event-topic` still targets `kafka-system`.
+**The order matters.** `event-bus up` installs `kafka-system` first and waits for it, because `kafka-upgrade` depends on its CRDs and ClusterRoles. `event-bus down` removes `kafka-upgrade` first and `kafka-system` last, and deletes the extra ClusterRoleBinding. `event-bus status` reports both. `event-topic` still targets `kafka-system`.
 
 ## Topology
 
@@ -147,11 +146,11 @@ On a 16GB Mac, give the Docker VM **11GiB**. That leaves macOS about 5GB; a larg
 | lite base platform: measured at ≈ 2.85GiB on 2026-10-10, when this shape was named `dev`, with Hubble on and four Flux controllers; less now that both are trimmed (estimate) | ≈ 2.6GiB |
 | Headroom for the VM, registry and churn | ≈ 0.7GiB |
 | **Usable for Kafka** | **≈ 7.7GiB** |
-| Strimzi operator (one per bus; the table is for `kraft` alone) | 0.38GiB |
+| Strimzi operator (one per Kafka; the table is for `kafka-system` alone) | 0.38GiB |
 | Kafka `strimzi`: 3 × 768Mi + 2 × 192Mi (fleet; lite has 1 broker: 1.13GiB) | 2.63GiB |
 | **Total** | **3.0GiB, ≈ 4.7GiB spare** |
 
-The `upgrade` bus roughly doubles the Kafka rows (a second operator and a second cluster, 1.5GiB on `lite`, 3.0GiB on `fleet`). That is still inside the budget on `fleet` but tight on `lite`'s single agent: run it only when you are testing across versions.
+On `fleet` the second Kafka and its operator roughly double the Kafka rows (about 3.0GiB more, so about 6.0GiB in total against the 7.7GiB usable). That is inside the budget but leaves little spare.
 
 CPU is not the constraint: the bus requests about 0.85 of 12 cores.
 

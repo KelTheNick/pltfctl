@@ -2,19 +2,20 @@
 # pltfctl event bus: a toggle on the running platform, not part of `up`.
 # Sourced by scripts/pltfctl. Function-only.
 #
-#   pltfctl event-bus up [bus]   install the Strimzi operator + one Kafka bus
-#   pltfctl event-bus down       remove both (and the bus's data)
+#   pltfctl event-bus up [bus]   install the Strimzi operator + Kafka
+#   pltfctl event-bus down       remove everything it installed (and the data)
 #   pltfctl event-bus status     operator, Kafka and per-broker start-up state
 #
-# Buses are named in infra/k3d/fleet.env (PLTF_EVENT_BUSES). Each is one manifest,
-# deploy/<ctx>/<bus namespace>/<bus>.yaml, next to that namespace's
-# namespace.yaml and strimzi-operator.yaml. There are two namespaces, each
-# with its own namespace-scoped operator:
-#   kraft    -> $PLTF_EVENT_BUS_NS (kafka-system), Kafka at KAFKA_BASE_VERSION
-#   upgrade  -> $PLTF_EVENT_BUS_UPGRADE_NS (kafka-upgrade), at KAFKA_VERSION
-# `upgrade` reuses kraft's CRDs and ClusterRoles, so kraft goes up first and
-# comes down last. flux_apply_tree skips both namespaces, so a plain `up`
-# never starts Kafka.
+# Buses are named in infra/k3d/fleet.env (PLTF_EVENT_BUSES). A bus is one
+# manifest, deploy/<ctx>/<namespace>/<bus>.yaml, next to that namespace's
+# namespace.yaml and strimzi-operator.yaml. A context has up to two bus
+# namespaces, each with its own namespace-scoped Strimzi operator:
+#   $PLTF_EVENT_BUS_NS      (kafka-system)  Kafka at KAFKA_BASE_VERSION
+#   $PLTF_EVENT_BUS_SECOND_NS (kafka-upgrade) Kafka at KAFKA_VERSION, only
+#                           where deploy/<ctx>/kafka-upgrade/ exists (fleet)
+# The second reuses the first's CRDs and ClusterRoles, so `up` installs the
+# first first and `down` removes it last. flux_apply_tree skips both
+# namespaces, so a plain `up` never starts Kafka.
 
 [ -n "${PLTFCTL_HOME:-}" ] && [ -d "$PLTFCTL_HOME/scripts/lib" ] || {
   printf '[err ] PLTFCTL_HOME unset or not a pltfctl checkout (got: %s)\n' \
@@ -24,12 +25,10 @@
 
 pltf_event_bus_names() { printf '%s' "$PLTF_EVENT_BUSES" | tr ' ' '|'; }
 
-# The namespace a bus lives in.
-pltf_event_bus_ns() { # bus
-  case "$1" in
-    upgrade) printf '%s\n' "$PLTF_EVENT_BUS_UPGRADE_NS" ;;
-    *)       printf '%s\n' "$PLTF_EVENT_BUS_NS" ;;
-  esac
+# The bus namespaces present for a context, in install order.
+pltf_event_bus_namespaces() { # ctx
+  printf '%s\n' "$PLTF_EVENT_BUS_NS"
+  [ ! -d "$PLTF_DEPLOY_DIR/$1/$PLTF_EVENT_BUS_SECOND_NS" ] || printf '%s\n' "$PLTF_EVENT_BUS_SECOND_NS"
 }
 
 pltf_event_bus_known() { # bus
@@ -50,35 +49,28 @@ pltf_event_bus_cluster() {
   printf '%s\n' "$_eb_c"
 }
 
-# The operator and Kafka images of a bus, pinned in .env.sbom.
-pltf_images_event_bus() { # bus
+# The operator and Kafka images of a bus namespace, pinned in .env.sbom.
+pltf_images_event_bus() { # namespace
   case "$1" in
-    upgrade) _ib_kv=$KAFKA_VERSION ;;
-    *)       _ib_kv=$KAFKA_BASE_VERSION ;;
+    "$PLTF_EVENT_BUS_SECOND_NS") _ib_kv=$KAFKA_VERSION ;;
+    *)                           _ib_kv=$KAFKA_BASE_VERSION ;;
   esac
   printf '%s\n' "quay.io/strimzi/operator:$STRIMZI_VERSION" \
     "quay.io/strimzi/kafka:$STRIMZI_VERSION-kafka-$_ib_kv"
 }
 
-cmd_event_bus_up() { # bus
-  _eb_bus=$1
-  _eb_name=$(pltf_event_bus_cluster)
+# One namespace's operator and Kafka, waited on until Ready.
+pltf_event_bus_install() { # name bus namespace
+  _eb_name=$1
+  _eb_bus=$2
+  _eb_ns=$3
   _eb_ctx="k3d-$_eb_name"
-  _eb_ns=$(pltf_event_bus_ns "$_eb_bus")
   _eb_dir="$PLTF_DEPLOY_DIR/$_eb_ctx/$_eb_ns"
   [ -f "$_eb_dir/$_eb_bus.yaml" ] ||
     pltf_die "No $_eb_bus bus for $_eb_ctx (missing ${_eb_dir#"$PLTFCTL_HOME"/}/$_eb_bus.yaml)"
 
-  # The second operator installs no CRDs or ClusterRoles of its own: it needs
-  # the first one's. Refuse early, not with a Helm error after a 5m wait.
-  if [ "$_eb_bus" = upgrade ]; then
-    kubectl --context "$_eb_ctx" -n "$PLTF_EVENT_BUS_NS" get helmrelease/strimzi-operator \
-      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -qx True ||
-      pltf_die "The upgrade bus reuses the kraft bus's Strimzi CRDs and ClusterRoles; run 'pltfctl event-bus up' (kraft) first"
-  fi
-
   # shellcheck disable=SC2046 # one image per word, by design
-  pltf_preload_images "$_eb_name" $(pltf_images_event_bus "$_eb_bus")
+  pltf_preload_images "$_eb_name" $(pltf_images_event_bus "$_eb_ns")
 
   pltf_step "installing the Strimzi operator $STRIMZI_VERSION in $_eb_ns on $_eb_ctx"
   flux_apply_file "$_eb_ctx" "$_eb_dir/namespace.yaml" >/dev/null
@@ -89,7 +81,7 @@ cmd_event_bus_up() { # bus
 
   # The HelmRelease is Ready only after its CRDs are installed, but the API
   # server can take a moment to serve them; retry briefly rather than fail.
-  pltf_step "applying the $_eb_bus bus on $_eb_ctx"
+  pltf_step "applying the $_eb_bus bus in $_eb_ns on $_eb_ctx"
   _eb_try=0
   until flux_apply_file "$_eb_ctx" "$_eb_dir/$_eb_bus.yaml" >/dev/null 2>&1; do
     _eb_try=$((_eb_try + 1))
@@ -97,12 +89,22 @@ cmd_event_bus_up() { # bus
     sleep 5
   done
 
-  pltf_step "waiting for Kafka to report Ready on $_eb_ctx (up to 10m)"
+  pltf_step "waiting for Kafka to report Ready in $_eb_ns (up to 10m)"
   kubectl --context "$_eb_ctx" -n "$_eb_ns" wait --for=condition=Ready \
     kafka --all --timeout=600s >/dev/null ||
     pltf_die "Kafka not Ready after 10m (kubectl -n $_eb_ns get kafka,kafkanodepool,pods)"
   _eb_kc=$(kubectl --context "$_eb_ctx" -n "$_eb_ns" get kafka -o jsonpath='{.items[0].metadata.name}')
-  pltf_ok "Event bus '$_eb_bus' ready on $_eb_ctx: $_eb_kc-kafka-bootstrap.$_eb_ns:9092"
+  _eb_kv=$(kubectl --context "$_eb_ctx" -n "$_eb_ns" get kafka -o jsonpath='{.items[0].spec.kafka.version}')
+  pltf_ok "Kafka $_eb_kv ready on $_eb_ctx: $_eb_kc-kafka-bootstrap.$_eb_ns:9092"
+}
+
+# Every bus namespace of the cluster, in order: the second operator needs the
+# CRDs and ClusterRoles the first one's release installs.
+cmd_event_bus_up() { # bus
+  _eb_upname=$(pltf_event_bus_cluster)
+  for _eb_upns in $(pltf_event_bus_namespaces "k3d-$_eb_upname"); do
+    pltf_event_bus_install "$_eb_upname" "$1" "$_eb_upns"
+  done
 }
 
 # Liveness / start-up state: operator, each Kafka cluster's Ready condition,
@@ -141,26 +143,25 @@ pltf_event_bus_health() { # ctx [namespace]
 }
 
 # The per-pod lines (state, restarts, CPU, memory, disk, PVCs) come from the
-# status table, for the kraft bus. The upgrade bus, if on, is checked after it
-# with the same health lines. Exit 1 when no bus is on, or one is not Ready.
-cmd_event_bus_status() { # [bus]
+# status table, for kafka-system. A second Kafka, if the cluster has one and it
+# is on, is checked after it with the same health lines. Exit 1 when no bus is
+# on, or one is not Ready.
+cmd_event_bus_status() {
   _eb_name=$(pltf_event_bus_cluster)
   _eb_ctx="k3d-$_eb_name"
-  _eb_only=${1:-}
-  _eb_rc=0
-  if [ "$_eb_only" != upgrade ]; then
-    if ! kubectl --context "$_eb_ctx" get ns "$PLTF_EVENT_BUS_NS" >/dev/null 2>&1; then
-      pltf_info "No event bus on $_eb_ctx (start one with: pltfctl event-bus up)"
-      return 1
-    fi
-    cmd_status event-bus || _eb_rc=1
-  fi
-  if kubectl --context "$_eb_ctx" get ns "$PLTF_EVENT_BUS_UPGRADE_NS" >/dev/null 2>&1; then
-    pltf_step "upgrade bus ($PLTF_EVENT_BUS_UPGRADE_NS)"
-    pltf_event_bus_health "$_eb_ctx" "$PLTF_EVENT_BUS_UPGRADE_NS" || _eb_rc=1
-  elif [ "$_eb_only" = upgrade ]; then
-    pltf_info "No upgrade bus on $_eb_ctx (start it with: pltfctl event-bus up upgrade)"
+  if ! kubectl --context "$_eb_ctx" get ns "$PLTF_EVENT_BUS_NS" >/dev/null 2>&1; then
+    pltf_info "No event bus on $_eb_ctx (start one with: pltfctl event-bus up)"
     return 1
+  fi
+  _eb_rc=0
+  cmd_status event-bus || _eb_rc=1
+  if [ -d "$PLTF_DEPLOY_DIR/$_eb_ctx/$PLTF_EVENT_BUS_SECOND_NS" ]; then
+    pltf_step "$PLTF_EVENT_BUS_SECOND_NS"
+    if kubectl --context "$_eb_ctx" get ns "$PLTF_EVENT_BUS_SECOND_NS" >/dev/null 2>&1; then
+      pltf_event_bus_health "$_eb_ctx" "$PLTF_EVENT_BUS_SECOND_NS" || _eb_rc=1
+    else
+      pltf_info "off (start it with: pltfctl event-bus up)"; _eb_rc=1
+    fi
   fi
   return "$_eb_rc"
 }
@@ -180,22 +181,19 @@ pltf_event_bus_remove() { # ctx namespace
   kubectl --context "$1" delete ns "$2" --wait --timeout=300s >/dev/null
 }
 
-# `down` removes both buses, upgrade first: it borrows kraft's ClusterRoles,
-# which die with kraft's release. `down upgrade` removes only the upgrade bus.
-cmd_event_bus_down() { # [bus]
+# The second Kafka goes first: it borrows the first operator's ClusterRoles,
+# which die with that release.
+cmd_event_bus_down() {
   _eb_name=$(pltf_event_bus_cluster)
   _eb_ctx="k3d-$_eb_name"
-  _eb_only=${1:-}
   if ! kubectl --context "$_eb_ctx" get ns "$PLTF_EVENT_BUS_NS" >/dev/null 2>&1 &&
-    ! kubectl --context "$_eb_ctx" get ns "$PLTF_EVENT_BUS_UPGRADE_NS" >/dev/null 2>&1; then
+    ! kubectl --context "$_eb_ctx" get ns "$PLTF_EVENT_BUS_SECOND_NS" >/dev/null 2>&1; then
     pltf_info "No event bus on $_eb_ctx; nothing to do"
     return 0
   fi
-  pltf_event_bus_remove "$_eb_ctx" "$PLTF_EVENT_BUS_UPGRADE_NS"
+  pltf_event_bus_remove "$_eb_ctx" "$PLTF_EVENT_BUS_SECOND_NS"
   kubectl --context "$_eb_ctx" delete clusterrolebinding \
     strimzi-cluster-operator-kafka-upgrade --ignore-not-found >/dev/null
-  if [ "$_eb_only" != upgrade ]; then
-    pltf_event_bus_remove "$_eb_ctx" "$PLTF_EVENT_BUS_NS"
-  fi
-  pltf_ok "Event bus removed from $_eb_ctx${_eb_only:+ ($_eb_only only)}."
+  pltf_event_bus_remove "$_eb_ctx" "$PLTF_EVENT_BUS_NS"
+  pltf_ok "Event bus removed from $_eb_ctx."
 }

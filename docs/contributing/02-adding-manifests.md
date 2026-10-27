@@ -22,13 +22,15 @@ kgateway HelmRelease, the shared Gateway, and the `podinfo` sample
 
 - `deploy/k3d-lite/` holds the real files: the Hubble route, the OCI registry source, the
   podinfo ServiceExport (MCS-API, so it needs Cilium), and the event bus in `kafka-system`.
-- `kafka-system` is a toggle, not part of `up`: `flux_apply_tree` skips it, and
+- `kafka-system` and `kafka-upgrade` are toggles, not part of `up`: `flux_apply_tree` skips them, and
   `pltfctl event-bus up [bus]` applies `namespace.yaml`, `strimzi-operator.yaml` and `<bus>.yaml`
   (`scripts/lib/pltfctl/kafka.sh`). A new bus kind is a new `<bus>.yaml` plus its name in
   `PLTF_EVENT_BUSES` (`infra/k3d/fleet.env`).
 - `deploy/k3d-ops/` symlinks `flux-system`, `kube-public` and `kube-system` to lite's. Its
   `kafka-system/` is its own: a 3-replica `kraft.yaml`, with the namespace and operator files
-  symlinked to lite's.
+  symlinked to lite's. Its `kafka-upgrade/` holds a second Kafka at the newer version with its
+  own namespace-scoped operator; `event-bus up` installs it after `kafka-system` wherever that
+  directory exists.
 
 Editing a linked namespace therefore changes every context that links it, which is what you want
 for the platform. Links are per namespace directory, so a **new** file in a linked namespace
