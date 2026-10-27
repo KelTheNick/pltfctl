@@ -9,17 +9,16 @@ The two designs speak the same Kafka protocol. Clients do not change. What chang
 
 ## Where pltfctl shows each one
 
-pltfctl runs all three models: shared-nothing on `lite`, and each of shared-nothing, shared-nothing with tiered storage and shared-data as a variant of `dev`, chosen by `VARIANT_KAFKA` ([Kafka variants](../developer/01-variants.md)).
+pltfctl runs only the shared-nothing model, on Strimzi's Apache Kafka in KRaft mode. Tiered storage and shared-data (AutoMQ) were removed from pltfctl on purpose; they are discussed below, not deployed.
 
-| | Shared-nothing | Shared-nothing | Shared-nothing + tiered storage | Shared-data |
-|---|---|---|---|---|
-| Distro | `lite` (`pltfctl event-bus up`) | `dev`, variant `strimzi-kraft` (default) | `dev`, variant `aiven-tiered` | `dev`, variant `automq` |
-| Software | Strimzi operator, Apache Kafka in KRaft mode | The same Strimzi Kafka image as `lite`, started by hand (KRaft, one node, no operator) | Upstream Apache Kafka (KRaft, one node) with Aiven's tiered-storage plugin, over RustFS | AutoMQ (KRaft, one node), over RustFS |
-| Where the log is | Two JBOD volumes per broker, on `local-path` PVs | One local volume | Recent segments on a local volume; older segments of opted-in topics in bucket `kafka-tiered` in RustFS | Log and WAL in bucket `automq-data` in RustFS (S3 WAL, the only one open-source AutoMQ has) |
-| Durability | 3 replicas, `min.insync.replicas: 2` | None (one broker, one volume) | None for the local tail (one broker); the tiered copy sits on RustFS's single volume | RustFS's single volume |
-| Source | `deploy/k3d-lite/kafka-system/kraft.yaml` | `infra/compose/dev-strimzi-kraft.yaml` | `infra/compose/dev-aiven-tiered.yaml` | `infra/compose/dev-automq.yaml` |
+| | `lite` | `dev` variant `strimzi-kraft` |
+|---|---|---|
+| Software | Strimzi operator, Apache Kafka in KRaft mode (`pltfctl event-bus up`) | The same Strimzi Kafka image as `lite`, started by hand (KRaft, one node, no operator) |
+| Where the log is | Two JBOD volumes per broker, on `local-path` PVs | One local volume |
+| Durability | 3 replicas, `min.insync.replicas: 2`, one broker per agent | None (one broker, one volume) |
+| Source | `deploy/k3d-lite/kafka-system/kraft.yaml` | `infra/compose/dev-strimzi-kraft.yaml` |
 
-None is production-shaped. The `lite` brokers share one Docker disk, so its JBOD is real in layout but not in hardware ([Event bus](../devsecops/08-event-bus.md)). Every `dev` variant is a single node, and the object store of the RustFS variants is one container on one volume, with nothing to fail over to ([aiven-tiered](../developer/02-aiven-tiered.md), [automq](../developer/03-automq.md)).
+Neither is production-shaped: `dev` is a single broker, and `lite`'s three brokers share one Docker disk, so its JBOD is real in layout but not in hardware ([Event bus](../devsecops/08-event-bus.md)).
 
 ## Shared-nothing: Kafka on local disks
 
@@ -59,7 +58,7 @@ None is production-shaped. The `lite` brokers share one Docker disk, so its JBOD
   | NFS | milliseconds |
   | EBS | under a millisecond |
 
-  It also states that **AutoMQ Open Source supports only S3-compatible storage as the WAL**; the EBS and NFS options are in the commercial editions. So a self-hosted, open-source AutoMQ bus runs at hundreds of milliseconds per acknowledged produce. pltfctl's `dev` runs exactly this setup as its `automq` variant, on a local RustFS ([automq](../developer/03-automq.md)); its other variants acknowledge produces from a local disk.
+  It also states that **AutoMQ Open Source supports only S3-compatible storage as the WAL**; the EBS and NFS options are in the commercial editions. So a self-hosted, open-source AutoMQ bus runs at hundreds of milliseconds per acknowledged produce. pltfctl no longer ships this setup.
 - **The object store becomes the bus's foundation.** Its availability, consistency and throughput limits are now Kafka's.
   - **In the cloud:** S3 and its peers are mature.
   - **On-prem:** you must run a production-grade S3 store yourself, with multiple nodes, erasure coding and its own upgrades. Ceph, MinIO and Ozone are heavy to operate, MinIO's licence and community edition have changed, and RustFS reached 1.0 only in September 2026. A single-node store, like the one in `dev`, is a single point of failure.
@@ -76,7 +75,7 @@ Checked against Strimzi's current documentation and the KIP pages in October 202
 - **How it's configured.** It's a cluster-level `spec.kafka.tieredStorage` block of `type: custom` in the `Kafka` resource. It names a `RemoteStorageManager` class, its `classPath` and its `config`. Each topic then opts in with `remote.storage.enable=true`. It works with KRaft clusters.
 - **No storage backend included.** Strimzi's docs say users "integrate their own tiered storage plugins" and should check them before production. An S3 or RustFS target needs a plugin added to a custom Kafka image. Aiven's open-source tiered-storage plugin is the usual choice. Check that its release supports your Kafka version.
 - **Still shared-nothing.** It sits on top of the broker volumes (JBOD here): recent data and replication stay local, and only older segments move to object storage. It cuts retention cost, not scaling or cross-zone replication.
-- **Not in pltfctl's Strimzi.** `deploy/k3d-lite/kafka-system/kraft.yaml` has no `tieredStorage` block yet; adding one as an option on `lite` is planned. `dev` demonstrates the same Aiven plugin outside Strimzi, loaded from a volume without a custom image ([aiven-tiered](../developer/02-aiven-tiered.md)).
+- **Not in pltfctl's Strimzi.** `deploy/k3d-lite/kafka-system/kraft.yaml` has no `tieredStorage` block yet; pltfctl does not offer it.
 
 **Diskless topics (KIP-1150): not available.**
 - **KIP-1150 itself.** Its status is "Accepted", but by its own text acceptance agrees on the need and requirements and changes no code.
@@ -100,7 +99,7 @@ Most systems start with shared-nothing and add tiered storage when retention gro
 
 ## What this page does not establish
 
-The latency, cost and scaling claims above come from the vendor and project documents below. pltfctl has not benchmarked them. Neither `lite` nor any `dev` variant has been load-tested. The three `dev` variants, shared-data `automq` included, have been run live only as functional checks ([Kafka variants](../developer/01-variants.md#tested)). Before you commit to a design, measure produce latency, throughput and cost with your own message sizes, batching and retention.
+The latency, cost and scaling claims above come from the vendor and project documents below. pltfctl has not benchmarked them. Neither `lite` nor any `dev` variant has been load-tested. The `strimzi-kraft` `dev` variant has been run live only as a functional check ([Kafka variants](../developer/01-variants.md#tested)). Before you commit to a design, measure produce latency, throughput and cost with your own message sizes, batching and retention.
 
 ## Sources
 

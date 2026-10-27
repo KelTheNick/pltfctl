@@ -14,13 +14,13 @@
 # are rendered from, so the two cannot drift.
 pltf_ui_path() { # ui
   case "$1" in
-    argus | hubble | podinfo) printf '/\n' ;;
+    hubble | podinfo) printf '/\n' ;;
     gateway)                  printf '/readyz\n' ;;
     *)                        return 1 ;;
   esac
 }
 
-PLTF_UIS='argus hubble podinfo gateway'
+PLTF_UIS='hubble podinfo gateway'
 
 # Refuse to start a distro while a DIFFERENT one is running: distros share
 # host ports, so the second create would fail half-way with a bind error.
@@ -102,9 +102,8 @@ cmd_up() { # distro
     pltf_ok "k3d-$_name fabric applied (LB on :$(pltf_lb_http_port "$_name"))."
   done
 
-  _count=$(printf '%s\n' "$_clusters" | wc -l | tr -d ' ')
-  [ "$_count" -ge 2 ] && pltf_up_mesh "$_clusters"
-  pltf_ok "Distro '$_distro' is up. Try: http://$(pltf_ui_host "$_head" argus):$(pltf_lb_http_port "$_head")/"
+  [ "$(pltf_distro "$_distro" MESH)" = true ] && pltf_up_mesh "$_clusters"
+  pltf_ok "Distro '$_distro' is up. Try: http://$(pltf_ui_host "$_head" podinfo):$(pltf_lb_http_port "$_head")/"
 }
 
 # The Gateway's proxy Deployment is created by the kgateway controller only
@@ -221,8 +220,8 @@ PLTF_PROBE_POD=mesh-probe
 # including those against several targets; cmd_verify's trap removes every
 # cluster's probe pod even when an assertion fails or a run dies outright.
 #
-# sleep 2700 is sized for the three-cluster worst case (~1150s of sampling
-# plus startup); 1800 was sized for two. If the containers exit mid-run, the
+# sleep 2700 leaves headroom over the worst case (~1150s of sampling plus
+# startup for three clusters; fleet now has two). If the containers exit mid-run, the
 # remaining `kubectl exec`s fail and checks report 0/N — indistinguishable
 # from a genuine mesh failure. See scripts/README.md#the-probe-pod
 pltf_probe_start() { # ctx
@@ -381,7 +380,7 @@ pltf_assert_all_from() { # protocol ctx fqdn attempts want_cluster label
 # Targets are variadic because ClusterMesh is not transitive: three clusters
 # means six ordered directions, and a call-per-direction would start six probe
 # pods and re-run the target-independent aggregate checks six times instead of
-# three. Aggregates run ONCE per probe cluster; per-pod and grpc-health checks
+# three (fleet has two clusters, so two and two). Aggregates run ONCE per probe cluster; per-pod and grpc-health checks
 # run once per target.
 #
 # Uses _dir_rc, not cmd_verify's _rc: POSIX sh has no `local`, so reusing the

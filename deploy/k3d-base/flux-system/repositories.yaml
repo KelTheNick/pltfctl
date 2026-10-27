@@ -18,19 +18,6 @@ spec:
   interval: 30m
   url: oci://cr.kgateway.dev/kgateway-dev/charts
 ---
-# ── kube-argus ────────────────────────────────────────────────────────
-# Lightweight Kubernetes dashboard.
-# Upstream project: https://github.com/manishchaudhary101/kube-argus
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: kube-argus
-  namespace: flux-system
-spec:
-  type: default
-  interval: 30m
-  url: https://manishchaudhary101.github.io/kube-argus
----
 # ── strimzi ───────────────────────────────────────────────────────────
 # Kafka operator. Charts are published as OCI artifacts. Only lite and dev
 # install from it (deploy/k3d-{lite,dev}/kafka-system/); on fleet the source

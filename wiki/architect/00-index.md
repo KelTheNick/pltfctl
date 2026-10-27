@@ -4,7 +4,7 @@ This set is for choosing a production design, not for running pltfctl. pltfctl's
 
 ## Pages
 
-1. [Event bus: shared-data vs shared-nothing](01-event-bus-storage.md): production pros and cons of Kafka on local disks (Strimzi, `lite`) against Kafka on object storage (shared-data), where each sits in pltfctl (`lite`, and `dev`'s `strimzi-kraft`, `aiven-tiered` and `automq` variants); how to choose.
+1. [Event bus: shared-data vs shared-nothing](01-event-bus-storage.md): production pros and cons of Kafka on local disks (Strimzi, `lite`) against Kafka on object storage (shared-data), what pltfctl runs (shared-nothing only: `lite`, and `dev`'s `strimzi-kraft`); how to choose.
 
 ---
 

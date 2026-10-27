@@ -35,7 +35,7 @@ with `envsubst` from `fleet.env`, and the scripts read the same file through
 - CIDRs must not overlap within a meshed distro (`fleet`): Cilium ClusterMesh requires it.
 - Ports follow the 4-digit convention: `655x` for the API, `x080` for HTTP, `x443` for HTTPS.
 - The first cluster of each distro owns the registry (where `REGISTRY=true`) and, on Cilium
-  distros, the Cilium CA. It is created first and deleted after its peers. `fleet`'s first cluster is `op-1`.
+  distros, the Cilium CA. It is created first and deleted after its peers. `fleet`'s first cluster is `ops`.
 
 A Compose distro (`dev`) has no clusters. It has one stack file per Kafka variant,
 `infra/compose/<distro>-<variant>.yaml`; `VARIANT_KAFKA` picks one, from the environment if
@@ -54,10 +54,10 @@ ports, CIDRs and IDs are unique within the distro, `deploy/k3d-base/` exists, ev
 
 1. Add its name to `PLTF_DISTRO_<D>_CLUSTERS` and to `PLTF_ALL_CLUSTERS`, and add a
    `PLTF_<NAME>_*` block to `infra/k3d/fleet.env`.
-2. Copy a template from the same distro (for example `infra/k3d/fleet/op-3.yaml`) to
+2. Copy a template from the same distro (for example `infra/k3d/fleet/ops.yaml`) to
    `infra/k3d/<distro>/<name>.yaml` and change `metadata.name`.
 3. Only if the cluster needs its own additions, create `deploy/k3d-<name>/`. Symlink each
-   namespace directory to a sibling's, as `deploy/k3d-op-2/` does with `../k3d-op-1/`. A cluster
+   namespace directory to a sibling's, as `deploy/k3d-ops/` does with `../k3d-lite/`. A cluster
    with no directory still gets everything in `deploy/k3d-base/`.
 4. Run `./scripts/projctl check`.
 

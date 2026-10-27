@@ -4,7 +4,7 @@ This page covers who and what can act on the clusters: the human's kubeconfig id
 
 ## Kubeconfig contexts
 
-k3d writes one context per cluster into the default kubeconfig. Contexts are named `k3d-<cluster>`: `k3d-lite`, `k3d-op-1`, `k3d-op-2`, `k3d-op-3` (`infra/k3d/*/*.yaml`, `scripts/lib/pltfctl/common.sh`).
+k3d writes one context per cluster into the default kubeconfig. Contexts are named `k3d-<cluster>`: `k3d-lite`, `k3d-ops` (`infra/k3d/*/*.yaml`, `scripts/lib/pltfctl/common.sh`).
 
 | Setting | Value | Effect |
 |---|---|---|
@@ -33,24 +33,11 @@ Flux's controllers run in `flux-system` under the ServiceAccounts and RBAC that 
 
 cilium-cli installs Cilium, Hubble and (on `fleet`) `clustermesh-apiserver` into `kube-system` with the ServiceAccounts and RBAC from the Cilium Helm chart. pltfctl does not override them (`scripts/lib/pltfctl/cilium.sh`).
 
-## kube-argus
-
-kube-argus is a lightweight Kubernetes dashboard, installed by Flux in `kube-system` (`deploy/k3d-base/kube-system/kube-argus.yaml`):
-
-| Setting | Value |
-|---|---|
-| `DEFAULT_ROLE` | `viewer` |
-| Service | `ClusterIP` on 8080, exposed only through the Gateway |
-| Ingress | disabled |
-| Requests / limits | 50m CPU, 64Mi / 250m CPU, 256Mi |
-
-The dashboard is reached over plain HTTP at `[<prefix>-]argus.k3d.workbench.local.gd`. No login is configured in pltfctl's values.
-
 ## Namespaces
 
 Two namespaces split the platform from what runs on it. A third, `kafka-system`, exists only while the event bus is on.
 
-**`kube-system` is the platform.** Cilium, Hubble (when enabled), kgateway, the shared Gateway, its `/readyz` route, kube-argus, and the HelmReleases that Flux reconciles for them live here. The Flux sources do not: every `HelmRepository` and `OCIRepository` lives in `flux-system`, and each HelmRelease references its source with `sourceRef.namespace: flux-system` (`deploy/k3d-base/flux-system/repositories.yaml`).
+**`kube-system` is the platform.** Cilium, Hubble (when enabled), kgateway, the shared Gateway, its `/readyz` route, and the HelmReleases that Flux reconciles for them live here. The Flux sources do not: every `HelmRepository` and `OCIRepository` lives in `flux-system`, and each HelmRelease references its source with `sourceRef.namespace: flux-system` (`deploy/k3d-base/flux-system/repositories.yaml`).
 
 **`kube-public` holds sample and test workloads.** The `podinfo` StatefulSet is deployed there on every distro, along with its smoke route. `lite` and `fleet` also export its Service through the mesh. It exercises the platform. Kubernetes creates `kube-public` itself, and it is **world-readable by default**. So only throwaway workloads belong there, never anything sensitive (`deploy/k3d-base/kube-public/podinfo.yaml`, `deploy/k3d-lite/kube-public/podinfo-export.yaml`).
 
@@ -77,7 +64,6 @@ These are facts about the current state, not a plan.
 - Kafka's `plain` listener has no identity; only the `tls` listener enforces KafkaUser ACLs ([Event bus](08-event-bus.md#identities)).
 - The only human identity is the k3d admin user. There are no per-person users, groups or OIDC login.
 - The registry has no authentication. Anyone who can reach `localhost:5001` can push and pull.
-- kube-argus has no configured login; anyone who can reach the Gateway gets the `viewer` role.
 - No NetworkPolicy or CiliumNetworkPolicy is shipped. On Cilium distros the k3s NetworkPolicy controller is disabled and Cilium enforces only what is declared, which is nothing.
 - `kube-public` is world-readable, by Kubernetes default.
 - `cilium-ca`'s private key is replicated to every meshed cluster.

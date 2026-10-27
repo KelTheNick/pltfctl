@@ -17,18 +17,17 @@ There is no offline chart-render suite. Check behaviour against a running cluste
     ./scripts/pltfctl up && ./scripts/pltfctl status            # lite, the default distro
     curl -fsS http://gateway.k3d.workbench.local.gd:8080/readyz
     ./scripts/pltfctl up dev && ./scripts/pltfctl verify        # dev: marker round trip on the running variant
-    VARIANT_KAFKA=aiven-tiered ./scripts/pltfctl up dev && ./scripts/pltfctl verify   # + tiering check (read back from RustFS)
     ./scripts/pltfctl up fleet && ./scripts/pltfctl verify      # acceptance gate for mesh changes
-    ./scripts/pltfctl event-bus up && ./scripts/pltfctl event-bus status   # event-bus changes (lite only)
+    ./scripts/pltfctl event-bus up && ./scripts/pltfctl event-bus status   # event-bus changes (lite, or fleet's ops)
 
-`pltfctl up dev`, the renamed `lite` distro and `down` (with its host-wide Docker prune) have
-not been run live either. The three `dev` variants were run live on 2026-10-13 through the real
+`pltfctl up dev` and `down` (with its host-wide Docker prune) have
+not been run live either. The `strimzi-kraft` `dev` variant was run live on 2026-10-13 through the real
 `cmd_up_compose`, `cmd_verify_compose` and `pltf_down_compose` functions under a test project
 name: each came up and passed `verify`, a variant switch was refused, and `down` left no
 containers or volumes ([Kafka variants](../../wiki/developer/01-variants.md#tested)). Switching
 variant needs `pltfctl down` first.
-`fleet` has not yet been run end to end on a live machine. A `verify` pass on it is the first
-evidence that a mesh change works, so report the output rather than assuming it.
+`fleet` is a single cluster, so `verify` there runs the single-cluster checks; the cross-cluster
+probe path runs only when a second cluster is added. Report the output you actually saw.
 
 `status` always exits 0. Gate on `verify`, not `status`. `<component> status` exits 1 when that
 component is unhealthy. `event-bus status` is different: it exits

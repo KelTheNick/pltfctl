@@ -12,7 +12,7 @@ This set covers the `dev` distro: a laptop stack for building against Kafka, wit
 - An exported `VARIANT_KAFKA` overrides that file for one run:
 
   ```sh
-  VARIANT_KAFKA=automq ./scripts/pltfctl up dev
+  VARIANT_KAFKA=<variant> ./scripts/pltfctl up dev
   ```
 
 - An unknown value is refused, listing the variants that exist (`pltf_compose_variant` in `scripts/lib/pltfctl/compose.sh`).
@@ -20,9 +20,7 @@ This set covers the `dev` distro: a laptop stack for building against Kafka, wit
 
 ## Pages
 
-1. [Kafka variants](01-variants.md): the three variants, endpoints, what `verify` checks on each, the switch guard and how to add a variant.
-2. [aiven-tiered: Kafka tiered storage on RustFS](02-aiven-tiered.md): upstream Kafka with tiered storage (Aiven plugin) on RustFS, and why RustFS rather than Ozone.
-3. [automq: shared-data Kafka on RustFS](03-automq.md): AutoMQ with its log and WAL in RustFS buckets.
+1. [Kafka variants](01-variants.md): the `strimzi-kraft` variant, endpoints, what `verify` checks, the switch guard and how to add a variant.
 
 ---
 

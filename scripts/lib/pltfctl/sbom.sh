@@ -34,8 +34,6 @@ pltf_sbom_expect() { # rel_path literal count label
 # runtime, so they cannot drift from it.
 pltf_sbom_check() {
   _sb_rc=0
-  pltf_sbom_expect deploy/k3d-base/kube-system/kube-argus.yaml \
-    "version: \"$KUBE_ARGUS_CHART_VERSION\"" 1 "kube-argus chart" || _sb_rc=1
   pltf_sbom_expect deploy/k3d-base/kube-system/kgateway.yaml \
     "version: \"$KGATEWAY_CHART_VERSION\"" 2 "kgateway chart" || _sb_rc=1
   pltf_sbom_expect deploy/k3d-lite/kafka-system/strimzi-operator.yaml \

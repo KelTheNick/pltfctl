@@ -1,6 +1,6 @@
 # Event bus
 
-The event bus is Apache Kafka, run by the Strimzi operator, in the `kafka-system` namespace on `lite`. `fleet` has no bus yet. (The developer `dev` distro runs Kafka outside Kubernetes instead, as a Compose stack in variants: `strimzi-kraft`, the same Kafka build without the operator, by default, or `aiven-tiered` or `automq` on RustFS: see [Kafka variants](../developer/01-variants.md).) On `lite` the bus is a toggle on the running platform, not part of `up`:
+The event bus is Apache Kafka, run by the Strimzi operator, in the `kafka-system` namespace on `lite` (one broker) or on `fleet` (three brokers, spread across its three agents). Each distro has its own manifest, `deploy/k3d-lite/kafka-system/kraft.yaml` and `deploy/k3d-ops/kafka-system/kraft.yaml`. (The developer `dev` distro runs Kafka outside Kubernetes instead, as a Compose stack: `strimzi-kraft`, the same Kafka build without the operator: see [Kafka variants](../developer/01-variants.md).) On `lite` the bus is a toggle on the running platform, not part of `up`:
 
 ```sh
 ./scripts/pltfctl up lite               # the platform, without Kafka
@@ -52,23 +52,23 @@ Flux installs the `strimzi-kafka-operator` chart from the OCI `HelmRepository` `
 
 ## Topology
 
-The bus exposes two internal listeners, `plain` on 9092 and `tls` on 9093. The Kafka cluster is named `strimzi` and its node pool `kraft-broker`, so the pods are `strimzi-kraft-broker-0`, `-1`, `-2`. Clients inside the cluster use `strimzi-kafka-bootstrap.kafka-system:9092` (open) or `:9093` (mTLS, see [Identities](#identities)). Nothing is routed through the Gateway.
+The bus exposes two internal listeners, `plain` on 9092 and `tls` on 9093. The Kafka cluster is named `strimzi` and its node pool `kraft-broker`, so the pods are `strimzi-kraft-broker-0` (and, on `fleet`, `-1` and `-2`). Clients inside the cluster use `strimzi-kafka-bootstrap.kafka-system:9092` (open) or `:9093` (mTLS, see [Identities](#identities)). Nothing is routed through the Gateway.
 
-| | lite |
-|---|---|
-| Node pools | `kraft-broker`: 3 × controller + broker |
-| Storage | JBOD on `local-path`: 2 × 5Gi per node |
-| Replication factor / min ISR | 3 / 2 |
-| Memory per pod (request = limit, heap) | 768Mi, 384m |
-| Entity operator | topic + user, 192Mi each |
+| | lite | fleet |
+|---|---|---|
+| Node pools | `kraft-broker`: 1 × controller + broker | `kraft-broker`: 3 × controller + broker |
+| Storage | JBOD on `local-path`: 2 × 5Gi per node | same |
+| Replication factor / min ISR | 1 / 1 | 3 / 2 |
+| Memory per pod (request = limit, heap) | 768Mi, 384m | same |
+| Entity operator | topic + user, 192Mi each | same |
 
-Source: `deploy/k3d-lite/kafka-system/kraft.yaml`.
+Sources: `deploy/k3d-lite/kafka-system/kraft.yaml`, `deploy/k3d-ops/kafka-system/kraft.yaml`.
 
 The heap is half of each container's limit. Kafka needs the rest for off-heap memory and the page cache. These sizes suit a proof of concept, not load testing.
 
 **JBOD is a layout, not separate disks.** `local-path` is k3s's default StorageClass. Each PV is a directory on the node where the pod first ran, and the pod stays pinned to that node from then on. Both volumes on a node are directories on the same Docker-backed disk. Volume 0 holds the KRaft metadata log (`kraftMetadata: shared`). `deleteClaim: true` removes the PVCs when the Kafka cluster is deleted; `down` removes them anyway.
 
-**Spread.** The pool has preferred pod anti-affinity on `kubernetes.io/hostname`. The lite server is tainted, so the three nodes land one per agent. Losing one agent then costs one node, and the quorum and `min.insync.replicas: 2` survive that loss.
+**Spread (fleet only).** The pool has *required* pod anti-affinity on `kubernetes.io/hostname`, and the server is tainted, so the three brokers land one per agent. Losing one agent then costs one node, and the quorum and `min.insync.replicas: 2` survive that loss. `lite` has one agent, so its single broker has no replication and no spread.
 
 ## Identities
 
@@ -131,7 +131,7 @@ On a 16GB Mac, give the Docker VM **11GiB**. That leaves macOS about 5GB; a larg
 | Headroom for the VM, registry and churn | ≈ 0.7GiB |
 | **Usable for Kafka** | **≈ 7.7GiB** |
 | Strimzi operator | 0.38GiB |
-| Kafka `strimzi`: 3 × 768Mi + 2 × 192Mi | 2.63GiB |
+| Kafka `strimzi`: 3 × 768Mi + 2 × 192Mi (fleet; lite has 1 broker: 1.13GiB) | 2.63GiB |
 | **Total** | **3.0GiB, ≈ 4.7GiB spare** |
 
 CPU is not the constraint: the bus requests about 0.85 of 12 cores.

@@ -9,8 +9,8 @@
 #     the k3s NetworkPolicy controller are all disabled. Nodes stay NotReady
 #     until `cilium install` runs.
 #   - Creates the shared OCI registry.
-#   - 1 server (tainted CriticalAddonsOnly) + 3 agents: workloads get three
-#     nodes to spread across. The control plane itself is NOT HA.
+#   - 1 server (tainted CriticalAddonsOnly) + 1 agent: workloads run on the
+#     agent. Nothing here is HA. No ClusterMesh (plain Cilium).
 #   - Gateway (kgateway) for host-network access; Traefik disabled.
 #   - Workload-observability stack: declared (O11Y=true), not implemented yet.
 apiVersion: k3d.io/v1alpha5
@@ -21,7 +21,7 @@ metadata:
 image: rancher/k3s:$K3D_TAG
 
 servers: 1
-agents: 3
+agents: 1
 
 network: $PLTF_NETWORK
 
@@ -88,8 +88,8 @@ options:
         nodeFilters:
           - "server:*"
           - "agent:*"
-      # Server runs the control plane + system add-ons only; workloads spread
-      # across the three agents (a 3-node workload quorum).
+      # Server runs the control plane + system add-ons only; workloads run on
+      # the agent.
       - arg: --node-taint=CriticalAddonsOnly=true:NoSchedule
         nodeFilters:
           - "server:*"

@@ -125,7 +125,7 @@ Usage:
   pltfctl status                Every component's health, then their total
                                 CPU, memory and disk.
   pltfctl <component> status    One component: nodes cni mesh core flux gateway
-                                dashboard samples event-bus. Exit 1 if unhealthy.
+                                samples event-bus. Exit 1 if unhealthy.
   pltfctl open [ui] [cluster]   List the fabric UIs, or open one in a browser.
   pltfctl verify                In-cluster: HTTP, TCP, TLS, gRPC. One cluster: Jobs in
                                 default hit podinfo in kube-public. Fleet: the
@@ -155,7 +155,7 @@ Usage:
                                 client key (PEM) to stdout.
 
 Distros (one at a time; infra/.infra.env, infra/k3d/fleet.env, infra/compose/):
-  lite   k3d-lite           Default. 1 server + 3 agents, Cilium (no
+  lite   k3d-lite           Default. 1 server + 1 agent, plain Cilium (no
                             kube-proxy), registry, workload o11y stack
                             (planned).
                             http://<ui>.k3d.workbench.local.gd:8080
@@ -163,18 +163,16 @@ Distros (one at a time; infra/.infra.env, infra/k3d/fleet.env, infra/compose/):
                             VARIANT_KAFKA (infra/compose/.variant.env, or
                             exported) picks infra/compose/dev-<variant>.yaml:
                               strimzi-kraft  Strimzi's Kafka, KRaft (default)
-                              aiven-tiered   Kafka + tiered storage on RustFS
-                              automq         AutoMQ, log in RustFS (S3)
-                            RustFS variants add S3 :9000, console :9001.
-  fleet  k3d-op-1, -2, -3   Cilium ClusterMesh across three clusters, registry,
-                            no o11y stack. Hosts are prefixed per cluster:
-                            http://op-1-<ui>…:8080  op-2-<ui>…:9080  op-3-<ui>…:7080
+  fleet  k3d-ops           One cluster, 1 server + 3 agents, Cilium with
+                            ClusterMesh enabled (a second cluster can join),
+                            registry, no o11y stack. Hosts are prefixed:
+                            http://ops-<ui>…:8080
 
   `fleet` is for something that must keep working after a whole cluster is
-  lost: anything deciding by majority vote needs three failure domains.
+  lost.
 
 Every k3d distro runs Flux; in kube-system kgateway + the Gateway (/readyz
-route) and the kube-argus dashboard; in kube-public one podinfo pod (HTTP
+route); in kube-public one podinfo pod (HTTP
 9898, TLS 9899, gRPC 9999) behind the podinfo smoke route. lite and fleet
 export podinfo across the mesh and add the local OCI registry:
   push from host: oci://localhost:5001   in-cluster: oci-registry:5000

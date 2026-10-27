@@ -1,12 +1,11 @@
-# The lite event bus: 3 dual-role (controller + broker) nodes, KRaft, JBOD on
-# local-path.
+# The lite event bus: ONE dual-role (controller + broker) node, KRaft, JBOD on
+# local-path. lite has a single agent, so there is no replication or spread;
+# the fleet distro's deploy/k3d-ops/kafka-system/kraft.yaml is the 3-replica one.
 #
 # local-path (k3s's default StorageClass) creates each PV as a directory on
 # the node the pod first lands on, and pins the pod to that node from then on.
 # The two JBOD volumes per node are therefore two directories on one
 # Docker-backed disk: the layout is real JBOD, the disk separation is not.
-# Anti-affinity spreads the pool across the three agents (the server is
-# tainted), so losing one agent costs one node; quorum and min ISR 2 survive.
 #
 # Sized for a 16GB laptop (wiki/devsecops/08-event-bus.md#capacity): the heap
 # is half the container limit, leaving the rest for off-heap and page cache.
@@ -18,7 +17,7 @@ metadata:
   labels:
     strimzi.io/cluster: strimzi
 spec:
-  replicas: 3
+  replicas: 1
   roles: [controller, broker]
   storage:
     type: jbod
@@ -40,17 +39,6 @@ spec:
   jvmOptions:
     -Xms: 384m
     -Xmx: 384m
-  template:
-    pod:
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                topologyKey: kubernetes.io/hostname
-                labelSelector:
-                  matchLabels:
-                    strimzi.io/pool-name: kraft-broker
 ---
 apiVersion: kafka.strimzi.io/v1
 kind: Kafka
@@ -79,11 +67,11 @@ spec:
       type: simple
       superUsers: [ANONYMOUS]
     config:
-      offsets.topic.replication.factor: 3
-      transaction.state.log.replication.factor: 3
-      transaction.state.log.min.isr: 2
-      default.replication.factor: 3
-      min.insync.replicas: 2
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
   entityOperator:
     topicOperator:
       resources:

@@ -21,15 +21,20 @@
 
 `pltfctl` is a Developer Workstation quickstart. It gives you a local,
 throwaway environment on a MacBook or Ubuntu workstation, in one of three
-distros: `lite` (the default: one [k3d](https://k3d.io) cluster on Cilium, 1
-server + 3 agents, with a local OCI registry), `fleet` (three Cilium k3d
-clusters meshed together) or `dev` (no Kubernetes: a Docker Compose stack of
-Kafka, in variants: `strimzi-kraft` by default, `aiven-tiered` (tiered storage on
-RustFS) or `automq` (shared-data on RustFS), chosen in `infra/compose/.variant.env`). Every k3d distro runs a GitOps operator
-([Flux](https://fluxcd.io), in `flux-system`), an API gateway (KGateway) and a
-Kubernetes dashboard (Kube-Argus) in `kube-system`, and a podinfo test server in
-`kube-public`; Cilium is installed by `cilium-cli` before Flux. Bring it up and tear it down with a
-single command, then develop against it as you would the real thing.
+distros:
+
+- `lite` (the default): one [k3d](https://k3d.io) cluster with 1 server and
+  1 agent, on plain Cilium, with a local OCI registry.
+- `fleet`: one k3d cluster named `ops` with 1 server and 3 agents, on Cilium
+  with ClusterMesh enabled, with the same registry.
+- `dev`: no Kubernetes, just a Docker Compose stack running Strimzi's Kafka
+  image in KRaft mode (chosen in `infra/compose/.variant.env`).
+
+Every k3d distro runs a GitOps operator ([Flux](https://fluxcd.io), in
+`flux-system`), an API gateway (KGateway) in `kube-system`, and a podinfo test
+server in `kube-public`; Cilium is installed by `cilium-cli` before Flux. Bring
+it up and tear it down with a single command, then develop against it as you
+would the real thing.
 
 --------------------------------------------------
 
@@ -70,10 +75,10 @@ Then, from the repo root:
 ./scripts/pltfctl up              # same as `up lite`; or `up fleet`, `up dev`
 ./scripts/pltfctl status          # every component's health, then total CPU, memory, disk
 ./scripts/pltfctl gateway status  # one component, per pod: nodes, cni, mesh, core, flux,
-                                  #   gateway, dashboard, samples, event-bus
-./scripts/pltfctl open            # lists the UI URLs; `open argus` opens one
+                                  #   gateway, samples, event-bus
+./scripts/pltfctl open            # lists the UI URLs; `open podinfo` opens one
 ./scripts/pltfctl verify          # proves HTTP, TCP, TLS and gRPC work
-./scripts/pltfctl event-bus up    # optional: adds Kafka (lite only); `event-bus status`, `event-bus down`
+./scripts/pltfctl event-bus up    # optional: adds Kafka (1 broker on lite, 3 on fleet); `event-bus status`, `event-bus down`
 ./scripts/pltfctl event-topic grant app orders   # a topic's client identity: mTLS cert, ACLs, quotas
 ./scripts/pltfctl down            # deletes every pltfctl cluster and stack, then prunes Docker
 ```
@@ -92,12 +97,11 @@ Then, from the repo root:
   anonymous volumes you care about.
 - **On `dev`,** the Kafka variant is `VARIANT_KAFKA` from
   `infra/compose/.variant.env` (default `strimzi-kraft`); an exported
-  `VARIANT_KAFKA=automq` overrides it for one run. Switching variant needs
+  `VARIANT_KAFKA=<variant>` overrides it for one run. Switching variant needs
   `down` first. `verify` and `open` cover the running variant; `status` and
   component status only print that they are not available in dev mode (k3d
-  distros only); `event-bus` and `event-topic` need `lite`. See
-  [wiki/developer/](wiki/developer/00-index.md). `pltfctl up dev`, the renamed
-  `lite` and `down` with its prune have not yet been run live.
+  distros only); `event-bus` and `event-topic` need a k3d distro. See
+  [wiki/developer/](wiki/developer/00-index.md). `pltfctl up dev` and `down` with its prune have not yet been run live.
 - **`status` always exits 0.** Use `verify` when you need a pass or fail.
   `<component> status` is the exception: it exits 1 when that component is
   unhealthy.
@@ -218,7 +222,6 @@ Note: the oci-registry HelmRepository shows a blank READY column until something
 ### Technology Stack
 
 - [Kgateway](https://kgateway.dev): Gateway API control plane
-- [Kube-Argus](https://github.com/manishchaudhary101/kube-argus): Kubernetes dashboard
 
 [back to top](#pltfctl)
 

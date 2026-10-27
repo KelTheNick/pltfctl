@@ -75,7 +75,7 @@ obviously pointing at a CA problem, or `cilium-agent`'s init container
 crashloops on cluster bring-up in a way that looks like an eBPF failure.
 
 ClusterMesh mTLS requires every cluster to trust the same CA, so the first
-cluster's `cilium-ca` secret (`op-1` on fleet) is copied to `op-2` and `op-3` before Cilium installs there —
+cluster's `cilium-ca` secret (`ops` on fleet) is copied to any further fleet cluster (none by default; `fleet` has one) before Cilium installs there —
 `cilium_propagate_ca`, called ahead of `cilium_install` for any joining
 cluster. The copy is stamped with Helm's ownership labels and annotations
 (`app.kubernetes.io/managed-by: Helm`, plus the `meta.helm.sh/release-name`
@@ -84,7 +84,7 @@ release adopts the secret on install instead of rejecting it with "invalid
 ownership metadata". The propagation is idempotent — a CA already present
 and matching the first cluster's is left alone — but a CA present and *differing* from
 the first cluster's must fail loudly rather than skip silently: that mismatch (most
-often `op-2` recreated with a fresh self-signed CA while `op-1` kept its old
+often `op-2` recreated with a fresh self-signed CA while `ops` kept its old
 one) is the single most common ClusterMesh failure mode, and the alternative
 is a permanently broken mesh with mTLS failures that never point back here.
 
@@ -102,7 +102,7 @@ exists.)
 ## DNS and PLTF_RESOLV_CONF
 
 CoreDNS forwarding fails with `SERVFAIL`, and Flux's external chart pulls
-(the kgateway HelmRepository, the kube-argus HelmRepository) fail to
+(the kgateway HelmRepository) fail to
 resolve their sources.
 
 The gateway address of this host's k3d bridge network — where k3s points a
@@ -131,7 +131,7 @@ CoreDNS 1.12.3.
 
 ## Mesh convergence
 
-`up` reports "ClusterMesh established between k3d-op-1 and k3d-op-2" — and
+`up` reports "ClusterMesh established between k3d-ops and k3d-op-2" — and
 `verify`'s very first assertion still sees a hard 0/N. Not a skewed
 split, not a coin flip: zero responses from either cluster.
 
@@ -145,13 +145,13 @@ several seconds after "established" was reported — one direction's mirror
 took roughly 7s to appear, polled at 3s resolution.
 
 `pltf_wait_mesh_mirrors` closes it, called right after `clustermesh_connect`
-for every ORDERED pair — mirroring is directional, so three clusters need six
-waits, not three. The connect loop above it runs over every UNORDERED pair
-instead (three for `fleet`), because `cilium clustermesh connect` is itself
-bidirectional AND ClusterMesh is not transitive: op-1<->op-2 plus op-1<->op-3
-does NOT give you op-2<->op-3. Miss that and a member on `op-2` silently
-cannot reach its peer on `op-3` while `clustermesh status` still looks
-healthy from `op-1`. It counts the source cluster's own `ServiceExport`s
+for every ORDERED pair — mirroring is directional, so two clusters need two
+waits, not one. The connect loop above it runs over every UNORDERED pair
+instead (one for `fleet`), because `cilium clustermesh connect` is itself
+bidirectional AND ClusterMesh is not transitive: with a third cluster,
+ops<->op-2 plus ops<->op-3 would NOT give you op-2<->op-3, and a member on
+`op-2` would silently fail to reach its peer on `op-3` while
+`clustermesh status` still looked healthy from `ops`. It counts the source cluster's own `ServiceExport`s
 in `kube-public` and waits for the destination to carry at least that many
 EndpointSlices labeled with that source's
 `multicluster.kubernetes.io/source-cluster`. That count is read fresh each
@@ -276,8 +276,7 @@ reporting success having applied nothing.
 The deploy tree is one set of files for every cluster, but the clusters of
 `fleet` must not all claim the same route hostnames. Route hosts are therefore
 written as `${PLTF_HOST_PREFIX}<ui>.k3d.workbench.local.gd`, and
-`flux_apply_file` fills the placeholder with the cluster's `<prefix>-` (`op-1-`,
-`op-2-`, `op-3-`: the cluster name) or with nothing. The prefix makes a URL name the cluster that
+`flux_apply_file` fills the placeholder with the cluster's `<prefix>-` (`ops-`: the cluster name) or with nothing. The prefix makes a URL name the cluster that
 serves it, even when the port was copied from another cluster's.
 
 `envsubst` is given the variable by name. A bare `envsubst` would also rewrite
@@ -287,9 +286,9 @@ second route for a per-cluster value into the shared tree.
 ## Compose variants
 
 The `dev` distro has one Compose file per Kafka variant,
-`infra/compose/dev-<variant>.yaml`, and all of them run under the same project
-name (`PLTF_DEV_PROJECT`). `compose.sh` does two non-obvious things because of
-that.
+`infra/compose/dev-<variant>.yaml` (today only `strimzi-kraft`), and all of them
+would run under the same project name (`PLTF_DEV_PROJECT`). `compose.sh` does
+two non-obvious things because of that.
 
 It asks Docker, not `.variant.env`, which variant is running. The file that
 started a stack is recorded in the `com.docker.compose.project.config_files`

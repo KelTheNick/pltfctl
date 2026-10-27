@@ -8,9 +8,9 @@ without deploying Kafka at all.
 
 ## Why this platform is shaped this way
 
-`pltfctl` does not deploy Kafka, and it never will — there is no Strimzi
-manifest anywhere in this repo. The motivating workload behind the
-three-cluster `fleet` distro (clusters `op-1`, `op-2`, `op-3`), the Cilium ClusterMesh, and the disjoint
+`pltfctl` does not deploy a multi-cluster Kafka, and it never will. Its
+Strimzi manifests (`event-bus`) are single-cluster. The motivating workload behind the
+`fleet` distro (one cluster, `ops`, ClusterMesh enabled; a second cluster no longer fits on a Mac, so the two-cluster statements below describe the mesh as it was measured), the Cilium ClusterMesh, and the disjoint
 CIDR allocation is a multi-cluster Strimzi Kafka deployment: brokers and
 KRaft controllers spread across two (or more) Kubernetes clusters, addressed
 by name from any of them. `pltfctl` provides the substrate that shape of
@@ -29,7 +29,7 @@ it knows exactly what they are and are not getting.
 Every pod in a StatefulSet gets a name of the shape
 `<pod>.<cluster>.<svc>.<ns>.svc.clusterset.local` that resolves identically
 from any cluster in the mesh — for example
-`podinfo-0.op-1.podinfo.kube-public.svc.clusterset.local`, resolved from
+`podinfo-0.ops.podinfo.kube-public.svc.clusterset.local`, resolved from
 `op-2`, for this platform's own sample workload. This maps directly onto two
 of Kafka's most cluster-topology-sensitive settings:
 
@@ -63,14 +63,14 @@ one cluster does not take the bootstrap address down with it.
 
 ### Disjoint pod/service CIDRs as a routing precondition
 
-Cluster `op-1` runs pod range `10.42.0.0/16` / service range `10.43.0.0/16`; cluster `op-2`
+Cluster `ops` runs pod range `10.42.0.0/16` / service range `10.43.0.0/16`; cluster `op-2`
 runs `10.44.0.0/16` / `10.45.0.0/16`. This is not incidental — Cilium
 ClusterMesh hard-requires non-overlapping pod and service CIDRs across every
 member cluster, because cross-cluster routing has no way to disambiguate two
 clusters both claiming `10.42.x.x`. For a stretched Kafka, that
 non-overlap is the precondition that makes broker-to-broker routing across
 clusters possible at all: a broker on cluster `op-2` connecting to a
-peer on cluster `op-1` needs the peer's pod IP to be unambiguous fleet-wide.
+peer on cluster `ops` needs the peer's pod IP to be unambiguous fleet-wide.
 
 ## What it deliberately does not provide
 
@@ -116,7 +116,7 @@ produces a mesh that resolves Service-level names correctly while silently
 failing at the per-pod addressing a Kafka broker fleet depends on.
 
 - **EndpointSlice synchronization is Beta upstream.** Per-pod fleet-wide
-  FQDNs (`podinfo-0.op-1....svc.clusterset.local`) do not work from Cilium's
+  FQDNs (`podinfo-0.ops....svc.clusterset.local`) do not work from Cilium's
   MCS-API support alone — MCS-API only merges Service backends into the
   local eBPF service map, it does not mirror a remote cluster's per-pod
   EndpointSlice data into the local cluster's DNS view. That mirroring is a
@@ -167,8 +167,8 @@ failing at the per-pod addressing a Kafka broker fleet depends on.
 
 `./scripts/pltfctl verify` (fleet distro only) runs an ephemeral probe pod in
 **each** cluster and checks the mesh from that cluster to **every other** one.
-With three clusters that is 3 probes covering all 6 ordered directions and 45
-assertions; a two-cluster mesh would make 20. The gate is designed to fail loudly
+With two clusters that is 2 probes covering both ordered directions and 20
+assertions; a three-cluster mesh would make 45. The gate is designed to fail loudly
 (non-zero exit) if any assertion does not hold. The `fleet` distro has not yet
 been run end to end on a live machine, so these counts describe what the check
 asserts, not a recorded pass. The checks span four protocols that stand in for

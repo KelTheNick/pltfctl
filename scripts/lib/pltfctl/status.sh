@@ -19,7 +19,7 @@
   exit 1
 }
 
-PLTF_COMPONENTS='nodes cni mesh core flux gateway dashboard samples event-bus'
+PLTF_COMPONENTS='nodes cni mesh core flux gateway samples event-bus'
 
 # k3s's local-path provisioner keeps each PVC in <dir>/pvc-<uid>_<ns>_<claim>.
 PLTF_LOCAL_PATH_DIR=/var/lib/rancher/k3s/storage
@@ -40,7 +40,6 @@ pltf_component_pods() { # component
     core)      printf 'kube-system ^(coredns|local-path-provisioner|metrics-server)-\n' ;;
     flux)      printf 'flux-system .\n' ;;
     gateway)   printf 'kube-system ^(kgateway|gw-api-kgateway|svclb-gw-api-kgateway)-\n' ;;
-    dashboard) printf 'kube-system ^kube-argus-\n' ;;
     samples)   printf 'kube-public ^podinfo-\n' ;;
     event-bus) printf '%s .\n' "$PLTF_EVENT_BUS_NS" ;;
     *)         return 1 ;;
@@ -52,7 +51,7 @@ pltf_component_pods() { # component
 pltf_component_on() { # name component
   case "$2" in
     mesh)
-      [ "$(pltf_distro_clusters "$(pltf_cluster_distro "$1")" | wc -l)" -gt 1 ] ;;
+      [ "$(pltf_distro "$(pltf_cluster_distro "$1")" MESH)" = true ] ;;
     event-bus) [ -d "$PLTF_DEPLOY_DIR/k3d-$1/$PLTF_EVENT_BUS_NS" ] ;;
     *)         return 0 ;;
   esac
@@ -285,10 +284,6 @@ pltf_component_health() { # name component
       pltf_hr_ready "$_ch_ctx" kube-system kgateway || _ch_rc=1
       kubectl --context "$_ch_ctx" -n kube-system get gateway 2>/dev/null || :
       pltf_url_ok gateway "http://$(pltf_ui_host "$1" gateway):$_ch_port/readyz" || _ch_rc=1
-      ;;
-    dashboard)
-      pltf_hr_ready "$_ch_ctx" kube-system kube-argus || _ch_rc=1
-      pltf_url_ok kube-argus "http://$(pltf_ui_host "$1" argus):$_ch_port/" || _ch_rc=1
       ;;
     samples)
       pltf_url_ok podinfo "http://$(pltf_ui_host "$1" podinfo):$_ch_port/" || _ch_rc=1

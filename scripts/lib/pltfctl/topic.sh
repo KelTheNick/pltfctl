@@ -71,7 +71,7 @@ cmd_topic_create() { # topic [--partitions N] [--replicas N]
   _tt=$(pltf_topic_target) || exit 1
   # shellcheck disable=SC2086 # "<ctx> <kafka-cluster>" into $1 $2
   set -- $_tt
-  # No --replicas: the bus's default.replication.factor (3 on dev, 1 on lite).
+  # No --replicas: the bus's default.replication.factor (3).
   pltf_step "applying KafkaTopic $_tc_topic on $1"
   {
     printf 'apiVersion: kafka.strimzi.io/v1\nkind: KafkaTopic\nmetadata:\n'

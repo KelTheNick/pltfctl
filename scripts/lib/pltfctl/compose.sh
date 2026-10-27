@@ -5,7 +5,7 @@
 # A Compose distro comes in variants, one file each:
 # infra/compose/<distro>-<variant>.yaml. The variant is VARIANT_KAFKA, from
 # the environment if exported, else infra/compose/.variant.env. Today that is
-# `dev`: strimzi-kraft (default), aiven-tiered, automq. Every variant names its
+# `dev`: strimzi-kraft. Every variant names its
 # broker service `kafka`. The files read images, pins and ports from the
 # environment; pltf_compose exports them.
 
@@ -69,16 +69,9 @@ pltf_compose() { # distro variant args...
   (
     # The broker image lite's Strimzi operator runs, derived from its pins.
     STRIMZI_KAFKA_IMAGE="quay.io/strimzi/kafka:$STRIMZI_VERSION-kafka-$KAFKA_VERSION"
-    export STRIMZI_KAFKA_IMAGE KAFKA_IMAGE AUTOMQ_IMAGE RUSTFS_IMAGE MC_IMAGE CURL_IMAGE
-    export TS_PLUGIN_VERSION TS_PLUGIN_CORE_SHA256 TS_PLUGIN_S3_SHA256
-    export PLTF_DEV_KAFKA_PORT PLTF_DEV_S3_PORT PLTF_DEV_S3_CONSOLE_PORT
+    export STRIMZI_KAFKA_IMAGE PLTF_DEV_KAFKA_PORT
     docker compose -p "$_pc_proj" -f "$(pltf_compose_file "$_pc_d" "$_pc_v")" "$@"
   )
-}
-
-# Kafka's CLI directory in a variant's broker image.
-pltf_compose_kafka_bin() { # variant
-  case "$1" in automq) printf '/opt/automq/kafka/bin\n' ;; *) printf '/opt/kafka/bin\n' ;; esac
 }
 
 # True while any container of the distro's project exists (running or not):
@@ -101,9 +94,8 @@ pltf_require_compose() {
 }
 
 # Start the stack, then wait for Kafka's healthcheck rather than trusting
-# `up --wait`: the bucket and plugin jobs exit by design, and older Compose
-# versions read any exited container as a failed wait. The first `up`
-# downloads the tiered-storage plugin (~100 MB), hence the generous wait.
+# `up --wait`: the one-shot data-owner job exits by design, and older Compose
+# versions read any exited container as a failed wait.
 cmd_up_compose() { # distro
   pltf_require_compose
   _uc_v=$(pltf_compose_variant "$1")
@@ -130,80 +122,30 @@ cmd_up_compose() { # distro
   pltf_compose_endpoints "$1" "$_uc_v"
 }
 
-# Kafka always; the S3 store only in a variant that runs one.
 pltf_compose_endpoints() { # distro variant
   printf '       %-14s %s\n' variant "$2" \
     kafka "localhost:$PLTF_DEV_KAFKA_PORT (host)  kafka:9092 (compose network)"
-  grep -q '^  rustfs:' "$(pltf_compose_file "$1" "$2")" || return 0
-  printf '       %-14s %s\n' \
-    s3 "http://localhost:$PLTF_DEV_S3_PORT" \
-    s3-console "http://localhost:$PLTF_DEV_S3_CONSOLE_PORT"
 }
 
-# Objects under the tiered-storage bucket, counted from a throwaway mc
-# container on the stack's network (the bucket job's service definition).
-pltf_compose_tiered_objects() { # distro variant
-  # shellcheck disable=SC2016 # $S3_KEY/$S3_SECRET expand inside the container
-  pltf_compose "$1" "$2" run --rm --no-deps -T --entrypoint /bin/sh buckets -c \
-    'mc alias set s3 http://rustfs:9000 "$S3_KEY" "$S3_SECRET" >/dev/null && mc ls -r s3/kafka-tiered | wc -l' \
-    2>/dev/null | tr -d ' \r'
-}
-
-# Checks the RUNNING variant, on a fresh topic deleted afterwards:
-#   every variant: one marker produced and read back from offset 0;
-#   aiven-tiered also: the topic tiers (remote.storage.enable=true, 1 MiB
-#     segments, 1s local retention), ~3 MiB of filler must put closed
-#     segments in s3://kafka-tiered, and the marker is read only after its
-#     local segment is gone, so that read is served from RustFS;
-#   automq: its acknowledged produce is already in S3 (the WAL bucket).
+# Checks the RUNNING variant: one marker produced to a fresh topic and read
+# back from offset 0, then the topic deleted.
 cmd_verify_compose() { # distro
   pltf_require_compose
   _vc_v=$(pltf_compose_running_variant "$1") ||
     pltf_die "The $1 stack is not running; start it with 'pltfctl up $1'"
   _vc_t="pltf-verify-$(date +%s)"
   _vc_msg="$_vc_t-marker"
-  _vc_bin=$(pltf_compose_kafka_bin "$_vc_v")
+  _vc_bin=/opt/kafka/bin
   _vc_bs=kafka:9092
   _vc_rc=0
-  _vc_cfg=''
-  [ "$_vc_v" = aiven-tiered ] &&
-    _vc_cfg='--config remote.storage.enable=true --config segment.bytes=1048576 --config local.retention.ms=1000'
   pltf_step "VARIANT_KAFKA=$_vc_v: creating topic $_vc_t"
-  # shellcheck disable=SC2086 # _vc_cfg is a word list by design
   pltf_compose "$1" "$_vc_v" exec -T kafka "$_vc_bin/kafka-topics.sh" --bootstrap-server "$_vc_bs" \
-    --create --topic "$_vc_t" --partitions 1 $_vc_cfg >/dev/null ||
+    --create --topic "$_vc_t" --partitions 1 >/dev/null ||
     pltf_die "could not create topic $_vc_t (docker logs $(pltf_compose_container "$1" kafka))"
   pltf_step "producing a marker"
   printf '%s\n' "$_vc_msg" | pltf_compose "$1" "$_vc_v" exec -T kafka "$_vc_bin/kafka-console-producer.sh" \
     --bootstrap-server "$_vc_bs" --topic "$_vc_t" >/dev/null ||
     pltf_die "produce to $_vc_t failed"
-
-  if [ "$_vc_v" = aiven-tiered ]; then
-    pltf_step "producing ~3 MiB of filler to close segments"
-    pltf_compose "$1" "$_vc_v" exec -T kafka "$_vc_bin/kafka-producer-perf-test.sh" --topic "$_vc_t" \
-      --num-records 3000 --record-size 1024 --throughput -1 \
-      --producer-props bootstrap.servers="$_vc_bs" >/dev/null ||
-      pltf_die "filler produce to $_vc_t failed"
-    pltf_step "waiting for closed segments to reach RustFS (up to 90s)"
-    _vc_i=0
-    _vc_n=0
-    while [ "$_vc_i" -lt 18 ]; do
-      _vc_n=$(pltf_compose_tiered_objects "$1" "$_vc_v") || _vc_n=0
-      [ "${_vc_n:-0}" -gt 0 ] && break
-      _vc_i=$((_vc_i + 1))
-      sleep 5
-    done
-    if [ "${_vc_n:-0}" -gt 0 ]; then
-      pltf_ok "tiered storage: $_vc_n object(s) in s3://kafka-tiered"
-    else
-      pltf_info "[fail] tiered storage: nothing in s3://kafka-tiered after 90s"
-      _vc_rc=1
-    fi
-    # Local retention is 1s and this variant's retention check runs every
-    # 10s (dev-aiven-tiered.yaml), so after 20s the marker's segment is gone
-    # from the broker's disk and offset 0 can only come from RustFS.
-    sleep 20
-  fi
 
   pltf_step "reading the marker back from offset 0 (up to 30s)"
   if pltf_compose "$1" "$_vc_v" exec -T kafka "$_vc_bin/kafka-console-consumer.sh" \

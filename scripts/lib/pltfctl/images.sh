@@ -28,7 +28,7 @@ pltf_images_flux() {
 pltf_images_cilium() { # distro
   _ic_mesh=false; _ic_hub=false
   pltf_enabled hubble && _ic_hub=true
-  [ "$(pltf_distro_clusters "$1" | wc -l | tr -d ' ')" -ge 2 ] && _ic_mesh=true
+  [ "$(pltf_distro "$1" MESH)" = true ] && _ic_mesh=true
   # shellcheck disable=SC2046 # word-split the flag list on purpose
   cilium install --version "$CILIUM_VERSION" --dry-run \
     --set k8sServiceHost=127.0.0.1 --set k8sServicePort=6443 \
@@ -43,8 +43,7 @@ pltf_images_for() { # name
   _if_d=$(pltf_cluster_distro "$1")
   printf '%s\n' "$PODINFO_IMAGE" \
     "cr.kgateway.dev/kgateway-dev/kgateway:v$KGATEWAY_CHART_VERSION" \
-    "cr.kgateway.dev/kgateway-dev/envoy-wrapper:v$KGATEWAY_CHART_VERSION" \
-    "ghcr.io/manishchaudhary101/kube-argus:$KUBE_ARGUS_CHART_VERSION"
+    "cr.kgateway.dev/kgateway-dev/envoy-wrapper:v$KGATEWAY_CHART_VERSION"
   pltf_images_flux
   if [ "$(pltf_distro "$_if_d" CNI)" = cilium ]; then pltf_images_cilium "$_if_d"; fi
 }

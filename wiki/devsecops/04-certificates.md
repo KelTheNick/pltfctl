@@ -22,12 +22,12 @@ k3s generates the apiserver's serving certificate. kubectl reaches it through `k
 
 ## The Cilium CA
 
-`cilium-ca` is a Secret in `kube-system` holding `ca.crt` and `ca.key`. cilium-cli creates it when Cilium is installed on a distro's first cluster (`lite`, or `op-1` on `fleet`).
+`cilium-ca` is a Secret in `kube-system` holding `ca.crt` and `ca.key`. cilium-cli creates it when Cilium is installed on a distro's first cluster (`lite`, or `ops` on `fleet`).
 
-**Rule: every meshed cluster must trust the same CA.** ClusterMesh mTLS between clusters only works if they share it. So before Cilium installs on `op-2` or `op-3`, `cilium_propagate_ca` copies the first cluster's `cilium-ca` to the joining cluster (`scripts/lib/pltfctl/cilium.sh`, `scripts/README.md`).
+**Rule: every meshed cluster must trust the same CA.** ClusterMesh mTLS between clusters only works if they share it. So before Cilium installs on `op-2`, `cilium_propagate_ca` copies the first cluster's `cilium-ca` to the joining cluster (`scripts/lib/pltfctl/cilium.sh`, `scripts/README.md`).
 
 - **Helm ownership stamping.** The copy carries `app.kubernetes.io/managed-by: Helm` and the `meta.helm.sh/release-name: cilium` and `meta.helm.sh/release-namespace: kube-system` annotations. Without them, cilium-cli's Helm release rejects the pre-existing Secret with "invalid ownership metadata". With them, the release adopts it.
-- **Idempotent, but loud on mismatch.** A CA already present and matching is left alone. A CA present and different stops `up` with an error. A mismatch (most often `op-2` recreated with a fresh CA while `op-1` kept its old one) is the most common ClusterMesh failure, and its mTLS errors never point back to the CA. The fix is `down` + `up fleet`.
+- **Idempotent, but loud on mismatch.** A CA already present and matching is left alone. A CA present and different stops `up` with an error. A mismatch (most often `op-2` recreated with a fresh CA while `ops` kept its old one) is the most common ClusterMesh failure, and its mTLS errors never point back to the CA. The fix is `down` + `up fleet`.
 - **Why the first cluster is created first and deleted last.** It owns the CA every other cluster trusts (`infra/k3d/fleet.env`).
 
 The private key is copied in plaintext through `kubectl` between local contexts. That is acceptable on a single workstation only.
@@ -72,7 +72,7 @@ These are facts about the current state, not a plan.
 - There is no cert-manager or any other certificate controller. No certificate is rotated automatically.
 - Every certificate is self-signed or signed by a locally generated CA: the k3s apiserver, `cilium-ca`, and podinfo.
 - The registry has no TLS and no authentication configured.
-- Upstream chart sources (`oci://cr.kgateway.dev`, `https://manishchaudhary101.github.io/kube-argus`) are trusted on whatever TLS they serve; no chart signature verification is configured (`deploy/k3d-base/flux-system/repositories.yaml`).
+- Upstream chart sources (`oci://cr.kgateway.dev`) is trusted on whatever TLS they serve; no chart signature verification is configured (`deploy/k3d-base/flux-system/repositories.yaml`).
 
 ---
 

@@ -27,7 +27,6 @@ The short version:
 - For any change to what runs in a cluster: `./scripts/pltfctl up <lite|dev> && ./scripts/pltfctl verify`
   on the distro it affects.
 - For anything that touches the mesh: `./scripts/pltfctl up fleet && ./scripts/pltfctl verify`.
-  `fleet` has not yet been run end to end on a live machine, so a first pass there is still a test
-  of pltfctl itself, not only of your change.
+  `fleet` is a single cluster, so this does not exercise cross-cluster paths.
 - Before running `down`, check what is running: it removes every pltfctl cluster and the `dev`
   stack, then runs a host-wide `docker system prune -f` and `docker volume prune -f`.

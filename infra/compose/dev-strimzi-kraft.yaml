@@ -1,5 +1,5 @@
 # distro: dev, variant strimzi-kraft (default) — Strimzi's Kafka image in KRaft
-# mode, on a local volume: plain shared-nothing, no object store. Selected by
+# mode, on a local volume: plain shared-nothing. Selected by
 # VARIANT_KAFKA=strimzi-kraft (infra/compose/.variant.env).
 #
 # Run by `pltfctl up dev` as `docker compose -p $PLTF_DEV_PROJECT -f <this>`.

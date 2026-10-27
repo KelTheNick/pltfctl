@@ -17,7 +17,7 @@ This applies to the k3d distros, `lite` and `fleet`. The `dev` distro has no Kub
 `infra/compose/.variant.env` ([Kafka variants](../../wiki/developer/01-variants.md)).
 
 Anything every k3d distro should get goes in `deploy/k3d-base/`: the Flux sources, the
-kgateway and kube-argus HelmReleases, the shared Gateway, and the `podinfo` sample
+kgateway HelmRelease, the shared Gateway, and the `podinfo` sample
 (StatefulSet, Service and smoke route). The per-context directories hold only what differs:
 
 - `deploy/k3d-lite/` holds the real files: the Hubble route, the OCI registry source, the
@@ -26,9 +26,9 @@ kgateway and kube-argus HelmReleases, the shared Gateway, and the `podinfo` samp
   `pltfctl event-bus up [bus]` applies `namespace.yaml`, `strimzi-operator.yaml` and `<bus>.yaml`
   (`scripts/lib/pltfctl/kafka.sh`). A new bus kind is a new `<bus>.yaml` plus its name in
   `PLTF_EVENT_BUSES` (`infra/k3d/fleet.env`).
-- `deploy/k3d-op-1/` symlinks `flux-system`, `kube-public` and `kube-system` to lite's. It does not
-  link `kafka-system`, so `fleet` has no bus.
-- `deploy/k3d-op-2/` and `deploy/k3d-op-3/` symlink each namespace directory to `deploy/k3d-op-1/`.
+- `deploy/k3d-ops/` symlinks `flux-system`, `kube-public` and `kube-system` to lite's. Its
+  `kafka-system/` is its own: a 3-replica `kraft.yaml`, with the namespace and operator files
+  symlinked to lite's.
 
 Editing a linked namespace therefore changes every context that links it, which is what you want
 for the platform. Links are per namespace directory, so a **new** file in a linked namespace
@@ -38,8 +38,8 @@ dangling links.
 To deploy something to one context only, give it its own namespace under that context. The
 new namespace is a real directory inside that context's directory:
 
-    ./scripts/projctl new-ns  k3d-op-1 demo
-    ./scripts/projctl new-app k3d-op-1 demo hello   # OCIRepository (flux-system) + HelmRelease, from the local registry
+    ./scripts/projctl new-ns  k3d-ops demo
+    ./scripts/projctl new-app k3d-ops demo hello   # OCIRepository (flux-system) + HelmRelease, from the local registry
 
 Only replace a shared symlink with a real directory if the namespace truly has to differ
 between clusters. Once you do, that copy can drift from the others.
@@ -69,8 +69,8 @@ between clusters. Once you do, that copy can drift from the others.
 Nothing under `deploy/` may hold a per-cluster value. Two mechanisms carry them in, and no others:
 
 - Workloads read their own cluster name from the `pltf-cluster-info` ConfigMap.
-- Route hostnames use `${PLTF_HOST_PREFIX}`. `flux_apply_file` fills it with `op-1-`, `op-2-` or `op-3-`
-  on the fleet clusters (`op-1`, `op-2`, `op-3`), and with nothing on a cluster without a prefix.
+- Route hostnames use `${PLTF_HOST_PREFIX}`. `flux_apply_file` fills it with `ops-`
+  on the fleet cluster (`ops`), and with nothing on a cluster without a prefix.
 
 ---
 

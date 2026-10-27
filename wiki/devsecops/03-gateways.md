@@ -30,9 +30,7 @@ There is no HTTPS listener. The HTTPS host port is reserved in the k3d port maps
 
 | Cluster | Host LB HTTP | Host LB HTTPS (reserved, nothing listens) |
 |---|---|---|
-| `lite`, `op-1` | 8080 | 8443 |
-| `op-2` | 9080 | 9443 |
-| `op-3` | 7080 | 7443 |
+| `lite`, `ops` | 8080 | 8443 |
 
 Source: `infra/k3d/fleet.env`. Every code path takes the port from `pltf_lb_http_port`, which reads `fleet.env`, the same file the k3d configs are rendered from, so the two cannot drift (`scripts/lib/pltfctl/cmds.sh`).
 
@@ -46,14 +44,14 @@ Route hostnames follow `[<prefix>-]<ui>.k3d.workbench.local.gd` (`PLTF_DOMAIN` i
 
 | Cluster | Prefix | Example |
 |---|---|---|
-| `lite` | none | `argus.k3d.workbench.local.gd` |
-| `op-1`, `op-2`, `op-3` | `op-1`, `op-2`, `op-3` (the cluster name) | `op-2-argus.k3d.workbench.local.gd` |
+| `lite` | none | `podinfo.k3d.workbench.local.gd` |
+| `ops` | `ops` (the cluster name) | `ops-podinfo.k3d.workbench.local.gd` |
 
 The prefix makes a URL name the cluster that serves it, even when the port was copied from another cluster's URL (`scripts/README.md`).
 
 ## The PLTF_HOST_PREFIX allow-list
 
-The `deploy/` tree is one set of files for every cluster, but the `fleet` clusters must not all claim the same hostnames. Route hosts are written as `${PLTF_HOST_PREFIX}<ui>.k3d.workbench.local.gd`. `flux_apply_file` fills the placeholder with the cluster's `<prefix>-` or with nothing (`scripts/lib/pltfctl/flux.sh`).
+The `deploy/` tree is one set of files for every cluster, but clusters in a multi-cluster `fleet` must not all claim the same hostnames. Route hosts are written as `${PLTF_HOST_PREFIX}<ui>.k3d.workbench.local.gd`. `flux_apply_file` fills the placeholder with the cluster's `<prefix>-` or with nothing (`scripts/lib/pltfctl/flux.sh`).
 
 `envsubst` is given this one variable by name: `envsubst '${PLTF_HOST_PREFIX}'`. A bare `envsubst` would rewrite every other `$` in the YAML. A second variable on the allow-list would be a second route for per-cluster values into the shared tree, which must stay cluster-agnostic (`scripts/README.md`).
 
@@ -78,11 +76,10 @@ kgateway serves `/readyz` on its `health` port (9093), not on `grpc-xds` (9977).
 
 | UI | Host | Backend | Present on |
 |---|---|---|---|
-| kube-argus | `[<prefix>-]argus.k3d.workbench.local.gd` | `kube-argus` Service, port 8080 | all distros |
 | Hubble | `[<prefix>-]hubble.k3d.workbench.local.gd` | `hubble-ui` Service, port 80 | Cilium distros, with `PLTF_ENABLE=hubble` |
 | podinfo | `[<prefix>-]podinfo.k3d.workbench.local.gd` | `podinfo` Service, port 9898 | all distros |
 
-Sources: `deploy/k3d-base/kube-system/kube-argus.yaml`, `deploy/k3d-lite/kube-system/hubble.yaml`, `scripts/lib/pltfctl/cmds.sh`.
+Sources: `deploy/k3d-lite/kube-system/hubble.yaml`, `scripts/lib/pltfctl/cmds.sh`.
 
 Hubble's relay and UI are installed by cilium-cli as part of the Cilium release, and only when `PLTF_ENABLE` names `hubble` at install time. Flux owns only the route, which is always applied and has no backend while Hubble is off. On a running cluster, `cilium hubble enable --ui --context k3d-<cluster>` turns Hubble on without another `up`. `lite` has no `hubble.yaml` because it has no Cilium. `pltfctl open` lists the URLs without a cluster and launches one only when the cluster is running (`scripts/lib/pltfctl/cmds.sh`).
 

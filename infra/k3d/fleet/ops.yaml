@@ -1,5 +1,5 @@
 ---
-# distro: fleet — cluster 3 of 3, Cilium ClusterMesh.  Context: k3d-op-3
+# distro: fleet — the one cluster, Cilium with ClusterMesh enabled.  Context: k3d-ops
 #
 # TEMPLATE: every PLTF_* placeholder is filled from infra/k3d/fleet.env by
 # envsubst at create time. fleet.env is authoritative for every value.
@@ -8,20 +8,21 @@
 #   - Cilium CNI with kube-proxy replacement (eBPF); Flannel, kube-proxy and
 #     the k3s NetworkPolicy controller are all disabled. Nodes stay NotReady
 #     until `cilium install` runs.
-#   - Attaches to the registry k3d-op-1 created, and trusts k3d-op-1's Cilium CA.
-#   - Gateway (kgateway); hosts carry this cluster's PLTF_OP_<n>_HOST_PREFIX
-#     (e.g. op-3-argus.k3d.workbench.local.gd) so a URL names its cluster.
+#   - Creates the shared OCI registry and owns the Cilium CA any further
+#     cluster would trust: created first, deleted last.
+#   - Gateway (kgateway); hosts carry this cluster's PLTF_OPS_HOST_PREFIX
+#     (e.g. ops-podinfo.k3d.workbench.local.gd) so a URL names its cluster.
 #   - Pod/service CIDRs must not overlap across the fleet (ClusterMesh).
-#   - No o11y stack.
+#   - 1 server (tainted CriticalAddonsOnly) + 3 agents. No o11y stack.
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
-  name: op-3
+  name: ops
 
 image: rancher/k3s:$K3D_TAG
 
 servers: 1
-agents: 0
+agents: 3
 
 network: $PLTF_NETWORK
 
@@ -40,10 +41,14 @@ ports:
     nodeFilters:
       - loadbalancer
 
-# Attach to the registry k3d-op-1 created (registries.create in fleet/op-1.yaml).
+# Local OCI registry, created and removed with this cluster.
+# Host: localhost:<REGISTRY_HOST_PORT>  In-cluster: <REGISTRY_NAME>:<REGISTRY_PORT>
+# (k3d does NOT prefix the registry's own name with "k3d-").
 registries:
-  use:
-    - $PLTF_REGISTRY_NAME:$PLTF_REGISTRY_HOST_PORT
+  create:
+    name: $PLTF_REGISTRY_NAME
+    host: "0.0.0.0"
+    hostPort: "$PLTF_REGISTRY_HOST_PORT"
 
 # Static upstream resolver: the Docker bridge gateway k3s auto-detects runs
 # no DNS listener, so external chart pulls would fail. See
@@ -52,6 +57,7 @@ volumes:
   - volume: $PLTF_RESOLV_CONF:/etc/pltfctl/resolv.conf:ro
     nodeFilters:
       - server:*
+      - agent:*
 
 options:
   k3d:
@@ -80,6 +86,12 @@ options:
         nodeFilters:
           - "server:*"
       - arg: --resolv-conf=/etc/pltfctl/resolv.conf
+        nodeFilters:
+          - "server:*"
+          - "agent:*"
+      # Server runs the control plane + system add-ons only; workloads (the
+      # event bus's three brokers) spread across the three agents.
+      - arg: --node-taint=CriticalAddonsOnly=true:NoSchedule
         nodeFilters:
           - "server:*"
   kubeconfig:

@@ -5,7 +5,7 @@
   Cilium ClusterMesh requires it.
 - **The order that puts each distro's first cluster last to be deleted.** The first cluster owns
   the registry and the CA, so `up` creates it first and `down` deletes it after its peers
-  (`PLTF_ALL_CLUSTERS='op-3 op-2 op-1 lite'` in `infra/k3d/fleet.env`).
+  (`PLTF_ALL_CLUSTERS='ops lite'` in `infra/k3d/fleet.env`).
 - **Cilium and Hubble are installed by cilium-cli, not Flux**, on the Cilium distros (`lite`,
   `fleet`). Hubble's relay and UI are opt-in (`PLTF_ENABLE=hubble`). The CNI has to exist before Flux's controllers can schedule. Never turn them into a
   Flux HelmRelease.

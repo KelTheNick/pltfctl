@@ -61,8 +61,8 @@ Usage:
                                    tmp/, *.tmp, *.bak, *.orig, *.log.
 
 <ctx> is k3d-base (shared by every k3d distro) or one context: k3d-lite,
-k3d-op-1, k3d-op-2, k3d-op-3. k3d-op-1 links its namespaces to k3d-lite's and
-k3d-op-2/3 link to k3d-op-1's, so scaffolding into a linked namespace changes
+k3d-ops. k3d-ops links its flux-system, kube-public and kube-system
+namespaces to k3d-lite's, so scaffolding into a linked namespace changes
 every context sharing it. Use a new namespace to diverge per context.
 USAGE
 }

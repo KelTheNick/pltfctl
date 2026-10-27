@@ -29,12 +29,11 @@ pltf_enabled() { case " $PLTF_ENABLE " in *" $1 "*) return 0 ;; esac; return 1; 
 # o11y or not. The list and each kind are in infra/.infra.env; a k3d
 # distro's clusters, CNI, registry and o11y in infra/k3d/fleet.env (PLTF_DISTRO_*).
 #
-# Why `fleet` has three clusters: three is the first count you can LOSE one
-# of. Software that decides by majority vote needs 2 of 3 to agree; with two
-# places, one holds the majority and losing it stops everything. pltfctl does
-# not know or care which workload that is — it supplies failure domains.
+# `fleet` has one cluster with ClusterMesh enabled (PLTF_DISTRO_FLEET_MESH):
+# the mesh API server is up, so another cluster can be joined, but a single
+# Mac cannot afford a second. `lite` is plain single-cluster Cilium.
 
-pltf_upper() { printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_'; } # op-1 -> OP_1
+pltf_upper() { printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_'; } # ops -> OPS
 
 # `pltf_distro lite CNI` reads PLTF_DISTRO_LITE_CNI. Non-zero for an unknown
 # distro or an unset key, so it doubles as a distro-name validator.
@@ -126,7 +125,7 @@ pltf_lb_http_port() { pltf_fleet "$1" HTTP_PORT; }
 # Cilium ClusterMesh cluster ID (1-255, unique per cluster in the mesh).
 pltf_cluster_id() { pltf_fleet "$1" ID; }
 
-# "op-1-" for a cluster with a HOST_PREFIX, "" otherwise. Prepended to every
+# "ops-" for a cluster with a HOST_PREFIX, "" otherwise. Prepended to every
 # route hostname, so a fleet URL names the cluster that serves it.
 pltf_host_prefix() { # name
   _hp=$(pltf_fleet "$1" HOST_PREFIX) || _hp=''

@@ -20,9 +20,7 @@ Consequence: on `lite` and `fleet`, any tool that works by editing kube-proxy's 
 
 | Cluster | Pod CIDR | Service CIDR | Cluster DNS |
 |---|---|---|---|
-| `lite`, `op-1` | 10.42.0.0/16 | 10.43.0.0/16 | 10.43.0.10 |
-| `op-2` | 10.44.0.0/16 | 10.45.0.0/16 | 10.45.0.10 |
-| `op-3` | 10.46.0.0/16 | 10.47.0.0/16 | 10.47.0.10 |
+| `lite`, `ops` | 10.42.0.0/16 | 10.43.0.0/16 | 10.43.0.10 |
 
 Source: `infra/k3d/fleet.env`.
 
@@ -55,10 +53,10 @@ pltfctl ships no `CiliumLoadBalancerIPPool`. A pool is cluster-wide and claims e
 
 ## ClusterMesh
 
-ClusterMesh is Cilium's feature for joining clusters so pods and services in one can reach the other. On `fleet`, after every cluster is up (`pltf_up_mesh` in `scripts/lib/pltfctl/cmds.sh`):
+ClusterMesh is Cilium's feature for joining clusters so pods and services in one can reach the other. On `fleet` (`PLTF_DISTRO_FLEET_MESH=true`), after every cluster is up (`pltf_up_mesh` in `scripts/lib/pltfctl/cmds.sh`). With the single cluster `ops` only step 1 does anything; steps 2 and 3 apply once a second cluster is added:
 
 1. `clustermesh enable` on each cluster: `clustermesh-apiserver` as a NodePort with kvstoremesh. NodePort, not LoadBalancer, because k3d's servicelb gives no stable cross-cluster address while the shared Docker network makes node IPs routable (`scripts/lib/pltfctl/cilium.sh`).
-2. `clustermesh connect` once per **unordered** pair. ClusterMesh is not transitive: op-1↔op-2 plus op-1↔op-3 does not give op-2↔op-3 (`scripts/README.md`).
+2. `clustermesh connect` once per **unordered** pair. With two clusters that would be one pair; ClusterMesh is not transitive, so a third cluster would need every pair connected (`scripts/README.md`).
 3. A mirror wait once per **ordered** pair (see below).
 
 Each cluster has a Cilium cluster ID (1 to 255, unique in the mesh) from `fleet.env`. Single-cluster Cilium distros also get a name and ID, so they could be meshed later without reinstalling the CNI (`scripts/lib/pltfctl/cmds.sh`).
@@ -87,10 +85,8 @@ All host ports bind to the workstation. See [Gateways](03-gateways.md) for the L
 
 | Cluster | API | LB HTTP | LB HTTPS (reserved) |
 |---|---|---|---|
-| `lite`, `op-1` | 6550 | 8080 | 8443 |
-| `op-2` | 6551 | 9080 | 9443 |
-| `op-3` | 6552 | 7080 | 7443 |
-| registry (`lite`, `op-1`) | 5001 | | |
+| `lite`, `ops` | 6550 | 8080 | 8443 |
+| registry (`lite`, `ops`) | 5001 | | |
 
 The API binds to `127.0.0.1` under the host name `k3d.local.gd`, which resolves to `127.0.0.1`. The registry's `host` is `0.0.0.0` (`infra/k3d/fleet.env`, `infra/k3d/*/*.yaml`).
 
