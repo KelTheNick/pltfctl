@@ -26,3 +26,6 @@ docs/superpowers/
 
 # event-topic grant: client private keys
 .kafka-creds/
+
+# Scratch projects staged here before moving to their own repository
+.tmp/
