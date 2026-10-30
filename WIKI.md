@@ -19,6 +19,7 @@ Start at the [index](wiki/devsecops/00-index.md); each page links to the next.
 7. [Database](wiki/devsecops/07-database.md): placeholder (CloudNativePG).
 8. [Event bus](wiki/devsecops/08-event-bus.md): Strimzi Kafka as a toggle on lite and fleet (`pltfctl event-bus`), the second Kafka on fleet (`kafka-upgrade`, newer version: namespace-scoped operators, shared CRDs), topology, JBOD on local-path, and the 16GB-laptop memory budget.
 9. [Distributed cache](wiki/devsecops/09-distributed-cache.md): placeholder (Redis or Dragonfly).
+10. [Load generation](wiki/devsecops/10-load-generation.md): Kafka load against the running event bus (`pltfctl load`), one producer and one consumer-group `StatefulSet` per topic, sizing, and the mesh bootstrap.
 
 ## Developer reference
 
