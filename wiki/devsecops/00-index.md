@@ -17,6 +17,7 @@ pltfctl builds a throwaway Kubernetes environment on one local workstation. Plai
 7. [Database](07-database.md): placeholder (CloudNativePG).
 8. [Event bus](08-event-bus.md): Strimzi Kafka as a toggle on lite (`pltfctl event-bus`), and the 16GB-laptop memory budget.
 9. [Distributed cache](09-distributed-cache.md): placeholder (Redis or Dragonfly).
+10. [Load generation](10-load-generation.md): Kafka load against the running event bus (`pltfctl load`), producer/consumer StatefulSets per topic, sizing and the mesh bootstrap.
 
 ---
 

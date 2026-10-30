@@ -46,7 +46,7 @@ _cilium_override=${CILIUM_VERSION:-}
 # three files: what every distro shares (the distro list, each one's kind),
 # then the k3d clusters (names, ports, CIDRs, IDs, network, registry), then
 # the Compose stack (project, ports). Each is required.
-for _inv in infra/.infra.env infra/k3d/fleet.env infra/compose/compose.env; do
+for _inv in infra/.infra.env infra/k3d/fleet.env infra/compose/compose.env infra/load.env; do
   [ -f "$PLTFCTL_HOME/$_inv" ] || {
     printf '[err ] %s not found at %s — it is part of the inventory\n' \
       "$_inv" "$PLTFCTL_HOME/$_inv" >&2
@@ -62,6 +62,9 @@ done
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../infra/compose/compose.env
 . "$PLTFCTL_HOME/infra/compose/compose.env"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../infra/load.env
+. "$PLTFCTL_HOME/infra/load.env"
 
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/core/log.sh
@@ -99,6 +102,9 @@ done
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/pltfctl/topic.sh
 . "$PLTFCTL_HOME/scripts/lib/pltfctl/topic.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/pltfctl/load.sh
+. "$PLTFCTL_HOME/scripts/lib/pltfctl/load.sh"
 
 # k3s image tag, from .env.sbom; override via K3D_TAG (must exist for your
 # arch). Floor >= v1.34.1-k3s1 (CoreDNS 1.12.3): MCS-API's `multicluster`
@@ -158,6 +164,22 @@ Usage:
   pltfctl event-topic creds <user>
                                 Print the cluster CA cert, client cert and
                                 client key (PEM) to stdout.
+  pltfctl load up                Add Kafka load-test topics and (stopped)
+                                producer/consumer StatefulSets to the running
+                                event bus. Never starts Kafka itself.
+  pltfctl load start [--first N | --topics 03,07] [--producers P]
+          [--consumers C] [--force]
+                                Scale producers and consumers up (consumers
+                                first). Capped at PLTF_LOAD_MAX_PODS pods.
+  pltfctl load stop [--first N | --topics 03,07]
+                                Scale producers and consumers to 0.
+  pltfctl load status           Running pods, and consumer-group lag.
+  pltfctl load down              Delete the load namespace and its topics
+                                (and their data).
+  pltfctl load render            Print the manifests (kubectl apply -f - to
+                                use them by hand).
+  pltfctl load doctor            Check kubectl and that the bus is Ready.
+  pltfctl load check             Offline render test (no cluster needed).
 
 Distros (one at a time; infra/.infra.env, infra/k3d/fleet.env, infra/compose/):
   lite   k3d-lite           Default. 1 server + 1 agent, plain Cilium (no
@@ -196,6 +218,9 @@ Environment:
                     resolv.conf format (default: infra/k3d/network/resolv.conf's public
                     resolvers). Override to point at an internal/corporate
                     resolver behind a VPN or on an air-gapped host.
+  PLTF_LOAD_*      Every `load` tunable (topic count, rates, pod sizing, ...)
+                    lives in infra/load.env; export one to override it for a
+                    single run, e.g. PLTF_LOAD_THROUGHPUT=1000 pltfctl load up.
 USAGE
 }
 
@@ -278,6 +303,22 @@ main() {
         creds) cmd_topic_creds "$@" ;;
         -h | --help) usage ;;
         *) pltf_die "Usage: pltfctl event-topic create | delete | list | grant | revoke | creds" ;;
+      esac
+      ;;
+    load)
+      action=${1:-}
+      [ "$#" -eq 0 ] || shift
+      case "$action" in
+        up) require_no_args "$@"; cmd_load_up ;;
+        start) cmd_load_start "$@" ;;
+        stop) cmd_load_stop "$@" ;;
+        status) require_no_args "$@"; cmd_load_status ;;
+        down) require_no_args "$@"; cmd_load_down ;;
+        render) require_no_args "$@"; cmd_load_render ;;
+        doctor) require_no_args "$@"; cmd_load_doctor ;;
+        check) require_no_args "$@"; cmd_load_check ;;
+        -h | --help) usage ;;
+        *) pltf_die "Usage: pltfctl load up | start | stop | status | down | render | doctor | check" ;;
       esac
       ;;
     -h | --help | help) usage ;;

@@ -6,4 +6,4 @@ Not yet documented.
 
 ---
 
-← Previous: [Event bus](08-event-bus.md) · [Index](00-index.md)
+← Previous: [Event bus](08-event-bus.md) · [Index](00-index.md) · Next: [Load generation](10-load-generation.md) →

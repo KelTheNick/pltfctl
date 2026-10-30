@@ -80,6 +80,8 @@ Then, from the repo root:
 ./scripts/pltfctl verify          # proves HTTP, TCP, TLS and gRPC work
 ./scripts/pltfctl event-bus up    # optional: adds Kafka (lite: 1 broker; fleet: two Kafkas, 3 brokers each); `event-bus status`, `event-bus down`
 ./scripts/pltfctl event-topic grant app orders   # a topic's client identity: mTLS cert, ACLs, quotas
+./scripts/pltfctl load up         # optional: Kafka load-test topics + stopped producers/consumers
+./scripts/pltfctl load start --first 1   # scale one topic's load on; `load status`, `load stop`, `load down`
 ./scripts/pltfctl down            # deletes every pltfctl cluster and stack, then prunes Docker
 ```
 
@@ -100,7 +102,7 @@ Then, from the repo root:
   `VARIANT_KAFKA=<variant>` overrides it for one run. Switching variant needs
   `down` first. `verify` and `open` cover the running variant; `status` and
   component status only print that they are not available in dev mode (k3d
-  distros only); `event-bus` and `event-topic` need a k3d distro. See
+  distros only); `event-bus`, `event-topic` and `load` need a k3d distro. See
   [wiki/developer/](wiki/developer/00-index.md). `pltfctl up dev` and `down` with its prune have not yet been run live.
 - **`status` always exits 0.** Use `verify` when you need a pass or fail.
   `<component> status` is the exception: it exits 1 when that component is
@@ -130,6 +132,8 @@ infra/              what the project creates
     compose.env     project name and host ports
     .variant.env    the default Kafka variant (VARIANT_KAFKA)
     <distro>-<variant>.yaml  one Compose stack per Kafka variant
+  load.env          `pltfctl load` tunables (topic count, rates, pod sizing);
+                    exported overrides win, for a single run
 deploy/             what runs on the clusters (Flux resources and manifests)
   k3d-base/         applied to every distro, by namespace
   k3d-<cluster>/    one cluster's additions, by namespace (kafka-system is
